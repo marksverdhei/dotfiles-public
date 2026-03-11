@@ -30,6 +30,10 @@ ok "Initialized"
 cp "$DOTFILES/nvim/lua/_chadrc.lua" "$DOTFILES/nvim/lua/chadrc.lua" 2>/dev/null
 cp "$DOTFILES_PRIVATE/ghostty/default.config" "$DOTFILES_PRIVATE/ghostty/config" 2>/dev/null
 
+# ── Symlinks ─────────────────────────────────
+section "Symlinks"
+. "$DOTFILES/bootstrap/slinks.bash"
+
 # ── Hyprland ──────────────────────────────────
 if is_omarchy; then
   section "Hyprland"
