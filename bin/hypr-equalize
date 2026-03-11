@@ -1,0 +1,70 @@
+#!/bin/bash
+# Arrange all windows on current workspace into an equal grid (floating)
+
+# Get workspace info
+workspace_json=$(hyprctl activeworkspace -j)
+WORKSPACE=$(echo "$workspace_json" | jq '.id')
+
+# Get monitor info for this workspace
+monitor_name=$(echo "$workspace_json" | jq -r '.monitor')
+monitor_json=$(hyprctl monitors -j | jq ".[] | select(.name == \"$monitor_name\")")
+mon_x=$(echo "$monitor_json" | jq '.x')
+mon_y=$(echo "$monitor_json" | jq '.y')
+mon_w=$(echo "$monitor_json" | jq '.width')
+mon_h=$(echo "$monitor_json" | jq '.height')
+reserved_top=$(echo "$monitor_json" | jq '.reserved[1]')
+reserved_bottom=$(echo "$monitor_json" | jq '.reserved[3]')
+
+# Adjust for reserved space (waybar, etc)
+work_y=$((mon_y + reserved_top))
+work_h=$((mon_h - reserved_top - reserved_bottom))
+
+# Get all window addresses on active workspace (both tiled and floating)
+windows=($(hyprctl clients -j | jq -r ".[] | select(.workspace.id == $WORKSPACE and .hidden == false) | .address"))
+count=${#windows[@]}
+
+if [ $count -eq 0 ]; then
+    exit 0
+fi
+
+# Calculate grid dimensions (prefer wider layouts)
+if [ $count -eq 1 ]; then
+    cols=1; rows=1
+elif [ $count -eq 2 ]; then
+    cols=2; rows=1
+elif [ $count -le 4 ]; then
+    cols=2; rows=2
+elif [ $count -le 6 ]; then
+    cols=3; rows=2
+elif [ $count -le 9 ]; then
+    cols=3; rows=3
+else
+    cols=4; rows=$(( (count + 3) / 4 ))
+fi
+
+# Calculate cell size with gaps
+gaps=10
+cell_w=$(( (mon_w - gaps * (cols + 1)) / cols ))
+cell_h=$(( (work_h - gaps * (rows + 1)) / rows ))
+
+# Position each window
+i=0
+for addr in "${windows[@]}"; do
+    row=$((i / cols))
+    col=$((i % cols))
+
+    x=$((mon_x + gaps + col * (cell_w + gaps)))
+    y=$((work_y + gaps + row * (cell_h + gaps)))
+
+    # Ensure window is floating
+    is_floating=$(hyprctl clients -j | jq -r ".[] | select(.address == \"$addr\") | .floating")
+    if [ "$is_floating" != "true" ]; then
+        hyprctl dispatch togglefloating address:$addr
+    fi
+
+    # Move and resize
+    hyprctl dispatch movewindowpixel exact $x $y,address:$addr
+    hyprctl dispatch resizewindowpixel exact $cell_w $cell_h,address:$addr
+
+    ((i++))
+done

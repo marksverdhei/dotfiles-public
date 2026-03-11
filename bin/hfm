@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# --- Configuration ---
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/hf-fzf"
+CACHE_FILE="$CACHE_DIR/models.tsv"
+mkdir -p "$CACHE_DIR"
+
+# Check dependencies
+if ! command -v fzf &> /dev/null; then
+    echo "❌ Error: fzf is not installed."
+    exit 1
+fi
+
+# --- Python Fetcher Function ---
+# Accepts an optional argument for search query
+fetch_data_stream() {
+    QUERY="$1"
+    python3 - "$QUERY" <<'EOF'
+import sys
+import concurrent.futures
+import signal
+from huggingface_hub import HfApi
+
+# Handle SIGPIPE (if user closes fzf early) efficiently without tracebacks
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+def run():
+    api = HfApi()
+    query = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+
+    # --- MODE 1: GLOBAL SEARCH ---
+    if query:
+        try:
+            # Search global models sorted by downloads
+            models = api.list_models(search=query, limit=1000, sort="downloads", direction=-1)
+            for m in models:
+                # Format: ID  [⬇️  123k]
+                # Using standard coloring for the source column to match existing style
+                downloads = f"{m.downloads:,}" if m.downloads is not None else "0"
+                source = f"\033[34m⬇️  {downloads}\033[0m"
+                print(f"{m.id}\t[{source}]", flush=True)
+        except Exception:
+            pass
+        return
+
+    # --- MODE 2: PERSONAL/ORG RESOURCES (Default) ---
+    
+    # 1. Auth Check
+    try:
+        me = api.whoami()
+        username = me['name']
+        orgs = [o['name'] for o in me.get('orgs', [])]
+    except Exception:
+        # If not logged in, we can't fetch private/user stuff
+        return
+
+    # 2. Define Workers
+    # We use ANSI colors for the Source column
+    def list_user():
+        return [(m.id, "\033[34m👤 Your Repo\033[0m") for m in api.list_models(author=username, limit=1000)]
+
+    def list_org(org):
+        return [(m.id, f"\033[33m🏢 {org}\033[0m") for m in api.list_models(author=org, limit=1000)]
+
+    def list_cols(owner):
+        res = []
+        try:
+            for col in api.list_collections(owner=owner):
+                full = api.get_collection(col.slug)
+                for item in full.items:
+                    if item.item_type == 'model':
+                        res.append((item.item_id, f"\033[32m📂 {col.title}\033[0m"))
+        except: pass
+        return res
+
+    # 3. Async Execution
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        futures.append(executor.submit(list_user))
+        for org in orgs:
+            futures.append(executor.submit(list_org, org))
+        futures.append(executor.submit(list_cols, username))
+        for org in orgs:
+            futures.append(executor.submit(list_cols, org))
+
+        seen = set()
+
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                items = future.result()
+                for mid, source in items:
+                    if mid not in seen:
+                        seen.add(mid)
+                        # Print immediately. Python usually line-buffers to pipes, 
+                        # but flush=True guarantees it hits 'tee' instantly.
+                        print(f"{mid}\t[{source}]", flush=True)
+            except Exception:
+                pass
+if __name__ == "__main__":
+    run()
+EOF
+}
+
+# --- Internal Fetch Mode ---
+if [[ "$1" == "--fetch" ]]; then
+    fetch_data_stream "$2"
+    exit 0
+fi
+
+# --- Main Logic ---
+
+REFRESH=0
+if [[ "$1" == "-r" || "$1" == "--refresh" ]]; then
+    REFRESH=1
+fi
+
+# Define the FZF command styling
+# Added binds for Search and Reload
+FZF_CMD="fzf --height=40% --layout=reverse --border --prompt='Model > ' \
+    --delimiter=$'\t' --header='CTRL-S: Search Hub (Query) | CTRL-R: Reload Local' --ansi \
+    --bind 'ctrl-s:reload(hfm --fetch {q})' \
+    --bind 'ctrl-r:reload(hfm --fetch)'"
+
+# 1. If Cache exists and NO refresh requested: Read Cache
+if [[ -f "$CACHE_FILE" && "$REFRESH" -eq 0 ]]; then
+    cat "$CACHE_FILE" | eval "$FZF_CMD" | cut -f1
+
+# 2. Else: Fetch -> Tee (to cache) -> FZF
+else
+    echo "⬇️  Fetching from Hub..." >&2
+    # We only cache the default view (no args)
+    fetch_data_stream | tee "$CACHE_FILE" | eval "$FZF_CMD" | cut -f1
+fi

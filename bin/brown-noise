@@ -1,0 +1,17 @@
+#!/bin/bash
+# Brown noise with lowpass filter - easy on the ears, lows dominant
+
+case "${1:-start}" in
+    start)
+        pkill -f "play -n synth brownnoise" 2>/dev/null
+        play -n synth brownnoise lowpass 400 gain -5 &>/dev/null &
+        echo "Brown noise on"
+        ;;
+    stop)
+        pkill -f "play -n synth brownnoise" 2>/dev/null
+        echo "Brown noise off"
+        ;;
+    *)
+        echo "Usage: brown-noise [start|stop]"
+        ;;
+esac

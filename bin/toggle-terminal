@@ -1,0 +1,13 @@
+#!/bin/bash
+CONFIG="$HOME/.config/xdg-terminals.list"
+
+# Get current default (first line)
+current=$(head -1 "$CONFIG" 2>/dev/null)
+
+if [[ "$current" == "ghostty" ]]; then
+    echo -e "alacritty\nghostty" > "$CONFIG"
+    echo "Default terminal: alacritty"
+else
+    echo -e "ghostty\nalacritty" > "$CONFIG"
+    echo "Default terminal: ghostty"
+fi

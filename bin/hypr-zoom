@@ -1,0 +1,31 @@
+#!/bin/bash
+# Adjust Hyprland monitor scale (inflate/deflate system UI and font sizes)
+# Usage: hypr-zoom in | out | reset
+
+STEP=0.125
+DEFAULT=1.0
+MIN=0.5
+MAX=3.0
+
+hyprctl monitors -j | jq -c '.[]' | while read -r monitor; do
+  name=$(jq -r '.name' <<< "$monitor")
+  width=$(jq -r '.width' <<< "$monitor")
+  height=$(jq -r '.height' <<< "$monitor")
+  refresh=$(jq -r '.refreshRate' <<< "$monitor")
+  x=$(jq -r '.x' <<< "$monitor")
+  y=$(jq -r '.y' <<< "$monitor")
+  current=$(jq -r '.scale' <<< "$monitor")
+
+  case "$1" in
+    in)    new=$(echo "$current + $STEP" | bc) ;;
+    out)   new=$(echo "$current - $STEP" | bc) ;;
+    reset) new=$DEFAULT ;;
+    *)     echo "Usage: hypr-zoom in|out|reset" >&2; exit 1 ;;
+  esac
+
+  # Clamp to bounds
+  if (( $(echo "$new < $MIN" | bc -l) )); then new=$MIN; fi
+  if (( $(echo "$new > $MAX" | bc -l) )); then new=$MAX; fi
+
+  hyprctl keyword monitor "$name,${width}x${height}@${refresh},${x}x${y},${new}"
+done

@@ -1,0 +1,241 @@
+#!/bin/bash
+
+# HuggingFace Dataset Pusher
+# Interactive CLI for selecting files and pushing them to a private HF dataset
+
+set -e
+
+# --- Dependency Checks ---
+check_deps() {
+    local missing=()
+
+    if ! command -v gum &> /dev/null; then
+        missing+=("gum")
+    fi
+
+    if ! command -v python3 &> /dev/null; then
+        missing+=("python3")
+    fi
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "❌ Missing dependencies: ${missing[*]}"
+        [[ " ${missing[*]} " =~ " gum " ]] && echo "   Install gum: brew install gum (or) go install github.com/charmbracelet/gum@latest"
+        exit 1
+    fi
+
+    # Check Python packages
+    python3 - <<'EOF'
+import sys
+missing = []
+
+try:
+    import huggingface_hub
+except ImportError:
+    missing.append("huggingface_hub")
+
+try:
+    import datasets
+except ImportError:
+    missing.append("datasets")
+
+if missing:
+    print(f"❌ Missing Python packages: {', '.join(missing)}", file=sys.stderr)
+    print("   Install with: pip install " + " ".join(missing), file=sys.stderr)
+    sys.exit(1)
+EOF
+    if [[ $? -ne 0 ]]; then
+        exit 1
+    fi
+}
+
+# --- Main Logic ---
+main() {
+    check_deps
+
+    # Show header
+    gum style \
+        --border double \
+        --margin "1" \
+        --padding "1 2" \
+        --border-foreground 212 \
+        "🤗 HuggingFace Dataset Pusher"
+
+    # Step 1: Select files (filter to show only files, not directories)
+    gum style --foreground 212 "Step 1: Select files to upload"
+
+    # Get list of files (not directories) in current directory
+    mapfile -t files < <(find . -maxdepth 1 -type f ! -name ".*" -printf "%f\n" | sort)
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo "❌ No files found in current directory"
+        exit 1
+    fi
+
+    # Let user select multiple files
+    selected_files=$(printf '%s\n' "${files[@]}" | gum choose --no-limit --height 15 --header "Select files (space to select, enter to confirm)")
+
+    if [[ -z "$selected_files" ]]; then
+        echo "❌ No files selected"
+        exit 1
+    fi
+
+    # Convert to array
+    mapfile -t selected_array <<< "$selected_files"
+
+    echo ""
+    gum style --foreground 34 "✓ Selected ${#selected_array[@]} file(s)"
+
+    # Step 2: Ask for repo type (split name)
+    echo ""
+    gum style --foreground 212 "Step 2: Select dataset split"
+
+    repo_type=$(gum input --placeholder "train, test, validation, etc." --prompt "Split name: " --value "train")
+
+    if [[ -z "$repo_type" ]]; then
+        echo "❌ Split name cannot be empty"
+        exit 1
+    fi
+
+    echo ""
+    gum style --foreground 34 "✓ Split: $repo_type"
+
+    # Step 3: Get user's orgs from HuggingFace
+    echo ""
+    gum style --foreground 212 "Step 3: Fetching your organizations..."
+
+    org_list=$(python3 - <<'EOF'
+from huggingface_hub import HfApi
+
+try:
+    api = HfApi()
+    me = api.whoami()
+    username = me['name']
+    orgs = [o['name'] for o in me.get('orgs', [])]
+
+    # Print username first, then orgs
+    print(f"{username} (personal)")
+    for org in orgs:
+        print(org)
+except Exception as e:
+    print(f"ERROR: {e}", flush=True)
+    exit(1)
+EOF
+)
+
+    if [[ "$org_list" == ERROR:* ]]; then
+        echo "❌ Failed to fetch organizations: ${org_list#ERROR: }"
+        echo "   Make sure you're logged in with: huggingface-cli login"
+        exit 1
+    fi
+
+    # Let user select org
+    selected_org=$(echo "$org_list" | gum choose --header "Select organization")
+
+    if [[ -z "$selected_org" ]]; then
+        echo "❌ No organization selected"
+        exit 1
+    fi
+
+    # Extract org name (remove " (personal)" if present)
+    selected_org="${selected_org% (personal)}"
+
+    echo ""
+    gum style --foreground 34 "✓ Organization: $selected_org"
+
+    # Step 4: Ask for dataset name
+    echo ""
+    gum style --foreground 212 "Step 4: Enter dataset name"
+
+    dataset_name=$(gum input --placeholder "my-awesome-dataset" --prompt "Dataset name: ")
+
+    if [[ -z "$dataset_name" ]]; then
+        echo "❌ Dataset name cannot be empty"
+        exit 1
+    fi
+
+    dataset_id="$selected_org/$dataset_name"
+
+    echo ""
+    gum style --foreground 34 "✓ Dataset ID: $dataset_id"
+
+    # Step 5: Confirm and upload
+    echo ""
+    gum style --border normal --padding "1 2" --border-foreground 226 "$(cat <<SUMMARY
+📦 Upload Summary:
+   Files: ${#selected_array[@]}
+   Split: $repo_type
+   Destination: $dataset_id (private)
+SUMMARY
+)"
+
+    if ! gum confirm "Proceed with upload?"; then
+        echo "❌ Upload cancelled"
+        exit 0
+    fi
+
+    # Step 6: Upload files
+    echo ""
+    gum style --foreground 212 "📤 Uploading files..."
+
+    # Create a temporary Python script for uploading
+    tmpfile=$(mktemp /tmp/hfpush.XXXXXX.py)
+    trap "rm -f $tmpfile" EXIT
+
+    cat > "$tmpfile" <<'PYSCRIPT'
+import sys
+import json
+from pathlib import Path
+from huggingface_hub import HfApi, create_repo
+
+def main():
+    # Read arguments
+    files = sys.argv[1].split('\n')
+    split = sys.argv[2]
+    dataset_id = sys.argv[3]
+
+    try:
+        api = HfApi()
+
+        # Create repo if it doesn't exist
+        print(f"Creating/verifying repository {dataset_id}...")
+        create_repo(dataset_id, repo_type="dataset", private=True, exist_ok=True)
+        print(f"✓ Repository ready")
+
+        # Upload each file
+        for file in files:
+            if not file.strip():
+                continue
+
+            file_path = Path(file)
+            if not file_path.exists():
+                print(f"⚠️  File not found: {file}")
+                continue
+
+            # Upload to data/{split}/ directory in the dataset
+            path_in_repo = f"data/{split}/{file_path.name}"
+
+            print(f"Uploading {file_path.name}...")
+            api.upload_file(
+                path_or_fileobj=str(file_path),
+                path_in_repo=path_in_repo,
+                repo_id=dataset_id,
+                repo_type="dataset"
+            )
+            print(f"✓ Uploaded {file_path.name}")
+
+        print(f"\n🎉 Successfully pushed {len([f for f in files if f.strip()])} file(s) to {dataset_id}")
+        print(f"   View at: https://huggingface.co/datasets/{dataset_id}")
+
+    except Exception as e:
+        print(f"❌ Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+PYSCRIPT
+
+    # Execute upload
+    python3 "$tmpfile" "$selected_files" "$repo_type" "$dataset_id"
+}
+
+main "$@"

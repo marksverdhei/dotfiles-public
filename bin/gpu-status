@@ -1,0 +1,67 @@
+#!/bin/bash
+# System status for tmux status bar
+# Outputs CPU + GPU stats with optional color codes
+
+COLOR=${1:-"no"}  # Pass "tmux" for tmux color codes
+
+result=""
+
+# CPU stats
+cpu_util=$(top -bn1 | grep "Cpu(s)" | awk '{printf "%.0f", $2}')
+cpu_temp=$(sensors 2>/dev/null | awk '/Tctl:/ {gsub(/[+°C]/, "", $2); printf "%.0f", $2}')
+
+if [[ -n "$cpu_util" ]]; then
+    if [[ "$COLOR" == "tmux" ]]; then
+        # CPU temp color (matching OMP palette: blue/white/red)
+        if (( cpu_temp >= 80 )); then
+            cpu_temp_color="#[fg=#ff6666]"  # hot (red)
+        elif (( cpu_temp >= 60 )); then
+            cpu_temp_color="#[fg=#f7f7f7]"  # warm (white)
+        else
+            cpu_temp_color="#[fg=#66ccff]"  # cool (blue)
+        fi
+        result+="#[fg=#93d0ff]󰘚 #[fg=#b3ffde]${cpu_util}% ${cpu_temp_color}󰔏 ${cpu_temp}°"
+    else
+        result+="󰘚 ${cpu_util}% 󰔏 ${cpu_temp}°"
+    fi
+fi
+
+# GPU stats
+output=$(nvidia-smi --query-gpu=index,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
+
+if [[ -z "$output" && -z "$result" ]]; then
+    exit 0
+fi
+if [[ -n "$output" ]]; then
+    while IFS=', ' read -r idx util mem_used mem_total temp; do
+        mem_gb=$((mem_used / 1024))
+        mem_total_gb=$((mem_total / 1024))
+
+        if [[ "$COLOR" == "tmux" ]]; then
+            # Temperature color (blue/white/red)
+            if (( temp >= 80 )); then
+                temp_color="#[fg=#ff6666]"  # hot (red)
+            elif (( temp >= 60 )); then
+                temp_color="#[fg=#f7f7f7]"  # warm (white)
+            else
+                temp_color="#[fg=#66ccff]"  # cool (blue)
+            fi
+
+            if [[ -n "$result" ]]; then
+                result+="#[fg=#f7f7f7] · "  # white separator (OMP style)
+            fi
+            result+="#[fg=#76b900]󰢮${idx} #[fg=#b3ffde]${util}% #[fg=#ffcc66]󰍛 ${mem_gb}/${mem_total_gb}G ${temp_color}󰔏 ${temp}°"
+        else
+            if [[ -n "$result" ]]; then
+                result+=" | "
+            fi
+            result+="󰢮${idx} ${util}% 󰍛 ${mem_gb}/${mem_total_gb}G 󰔏 ${temp}°"
+        fi
+    done <<< "$output"
+fi
+
+if [[ "$COLOR" == "tmux" ]]; then
+    echo "${result}#[default]"
+else
+    echo "$result"
+fi

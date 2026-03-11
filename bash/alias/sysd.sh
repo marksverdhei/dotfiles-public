@@ -1,0 +1,5 @@
+alias scu='systemctl --user'
+alias jcu='journalctl --user -u'
+alias udreload='systemctl --user daemon-reload'
+alias sla='systemctl list-units --user --type=service --all'
+alias fservice='systemctl list-units --user --type=service --all | fzf'

@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""
+This utility script compares the contents for safetensors files
+for a.safetensors and b.safetensors it summarizes in the command line:
+1. difference in keys
+2. difference in shapes
+3. difference in tensor values (isclose)
+4. difference in ordering or unrelated difference like formatting
+"""
+from safetensors import safe_open
+import sys
+import torch
+
+file_a = sys.argv[1]
+file_b = sys.argv[2]
+
+def get_state_dict(path):
+    tensors = {}
+    with safe_open(path, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            tensors[key] = f.get_tensor(key)
+    return tensors
+
+
+def compare_safetensors(file_a, file_b):
+    print(f"Comparing:\n  A: {file_a}\n  B: {file_b}\n")
+    
+    # Load tensors
+    tensors_a = get_state_dict(file_a)
+    tensors_b = get_state_dict(file_b)
+    
+    keys_a = set(tensors_a.keys())
+    keys_b = set(tensors_b.keys())
+    
+    # 1. Check key differences
+    print("=" * 60)
+    print("1. KEY DIFFERENCES")
+    print("=" * 60)
+    
+    only_in_a = keys_a - keys_b
+    only_in_b = keys_b - keys_a
+    common_keys = keys_a & keys_b
+    
+    if only_in_a:
+        print(f"Keys only in A ({len(only_in_a)}):")
+        for key in sorted(only_in_a):
+            print(f"  - {key}")
+    else:
+        print("Keys only in A: None")
+    
+    if only_in_b:
+        print(f"\nKeys only in B ({len(only_in_b)}):")
+        for key in sorted(only_in_b):
+            print(f"  - {key}")
+    else:
+        print("Keys only in B: None")
+    
+    print(f"\nCommon keys: {len(common_keys)}")
+    
+    # 2. Check shape differences
+    print("\n" + "=" * 60)
+    print("2. SHAPE DIFFERENCES")
+    print("=" * 60)
+    
+    shape_diffs = []
+    for key in sorted(common_keys):
+        shape_a = tensors_a[key].shape
+        shape_b = tensors_b[key].shape
+        if shape_a != shape_b:
+            shape_diffs.append((key, shape_a, shape_b))
+    
+    if shape_diffs:
+        print(f"Found {len(shape_diffs)} tensors with different shapes:")
+        for key, shape_a, shape_b in shape_diffs:
+            print(f"  {key}:")
+            print(f"    A: {shape_a}")
+            print(f"    B: {shape_b}")
+    else:
+        print("No shape differences found.")
+    
+    # 3. Check tensor value differences (for tensors with matching shapes)
+    print("\n" + "=" * 60)
+    print("3. TENSOR VALUE DIFFERENCES")
+    print("=" * 60)
+    
+    value_diffs = []
+    matching_keys = [k for k in common_keys if tensors_a[k].shape == tensors_b[k].shape]
+    
+    for key in sorted(matching_keys):
+        tensor_a = tensors_a[key]
+        tensor_b = tensors_b[key]
+        
+        # Check if tensors are close
+        if not torch.allclose(tensor_a, tensor_b, rtol=1e-5, atol=1e-8):
+            # Calculate some statistics about the difference
+            diff = torch.abs(tensor_a - tensor_b)
+            max_diff = diff.max().item()
+            mean_diff = diff.mean().item()
+            
+            value_diffs.append((key, max_diff, mean_diff))
+    
+    if value_diffs:
+        print(f"Found {len(value_diffs)} tensors with different values:")
+        for key, max_diff, mean_diff in value_diffs:
+            print(f"  {key}:")
+            print(f"    Max absolute difference: {max_diff:.6e}")
+            print(f"    Mean absolute difference: {mean_diff:.6e}")
+    else:
+        print("No value differences found (all tensors are close).")
+    
+    # 4. Check ordering
+    print("\n" + "=" * 60)
+    print("4. ORDERING DIFFERENCES")
+    print("=" * 60)
+    
+    keys_a_list = list(tensors_a.keys())
+    keys_b_list = list(tensors_b.keys())
+    
+    if keys_a_list == keys_b_list:
+        print("Key ordering is identical.")
+    else:
+        print("Key ordering differs.")
+        if set(keys_a_list) == set(keys_b_list):
+            print("(Same keys, different order)")
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+    
+    if not only_in_a and not only_in_b and not shape_diffs and not value_diffs and keys_a_list == keys_b_list:
+        print("✓ Files are identical")
+    else:
+        print("✗ Files differ:")
+        if only_in_a or only_in_b:
+            print(f"  - Key differences: {len(only_in_a)} unique to A, {len(only_in_b)} unique to B")
+        if shape_diffs:
+            print(f"  - Shape differences: {len(shape_diffs)} tensors")
+        if value_diffs:
+            print(f"  - Value differences: {len(value_diffs)} tensors")
+        if keys_a_list != keys_b_list and set(keys_a_list) == set(keys_b_list):
+            print(f"  - Ordering differs")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python compare_safetensors.py <file_a.safetensors> <file_b.safetensors>")
+        sys.exit(1)
+    
+    compare_safetensors(file_a, file_b)

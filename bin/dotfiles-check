@@ -1,0 +1,95 @@
+#!/bin/bash
+# Validate dotfiles installation
+
+set -uo pipefail
+
+DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+DOTFILES_PRIVATE="${DOTFILES_PRIVATE:-$DOTFILES/private}"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+errors=0
+warnings=0
+
+ok() { printf "${GREEN}[OK]${NC} %s\n" "$1"; }
+warn() { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; ((warnings++)) || true; }
+fail() { printf "${RED}[FAIL]${NC} %s\n" "$1"; ((errors++)) || true; }
+
+echo "=== Dotfiles Validation ==="
+echo
+
+# Check broken symlinks
+echo "Checking for broken symlinks..."
+while IFS= read -r -d '' link; do
+  fail "Broken symlink: $link -> $(readlink "$link")"
+done < <(find "$DOTFILES" -xtype l -print0 2>/dev/null)
+
+while IFS= read -r -d '' link; do
+  fail "Broken symlink: $link -> $(readlink "$link")"
+done < <(find "$HOME/.bashrc.d" "$HOME/.config" -maxdepth 2 -xtype l -print0 2>/dev/null)
+
+if [[ $errors -eq 0 ]]; then
+  ok "No broken symlinks found"
+fi
+
+echo
+
+# Check key directories
+echo "Checking key directories..."
+for dir in "$DOTFILES/bash" "$DOTFILES/nvim" "$HOME/.bashrc.d"; do
+  [[ -d "$dir" ]] && ok "Directory exists: $dir" || fail "Missing directory: $dir"
+done
+
+echo
+
+# Check key symlinks
+echo "Checking key symlinks..."
+expected_links=(
+  "$HOME/.bashrc.d:$DOTFILES/bash"
+  "$HOME/.config/nvim:$DOTFILES/nvim"
+  "$HOME/.config/ghostty:$DOTFILES/ghostty"
+)
+
+for entry in "${expected_links[@]}"; do
+  link="${entry%%:*}"
+  target="${entry#*:}"
+  if [[ -L "$link" ]]; then
+    actual=$(readlink -f "$link" 2>/dev/null || echo "broken")
+    expected=$(readlink -f "$target" 2>/dev/null || echo "$target")
+    if [[ "$actual" == "$expected" ]]; then
+      ok "Symlink OK: $link"
+    else
+      warn "Symlink target mismatch: $link"
+    fi
+  else
+    fail "Not a symlink: $link"
+  fi
+done
+
+echo
+
+# Check required commands
+echo "Checking required commands..."
+for cmd in git gh nvim; do
+  command -v "$cmd" &>/dev/null && ok "Command found: $cmd" || warn "Command missing: $cmd"
+done
+
+echo
+
+# Check private integration
+echo "Checking private dotfiles..."
+if [[ -d "$DOTFILES_PRIVATE" ]]; then
+  ok "Private dotfiles present"
+  [[ -f "$DOTFILES_PRIVATE/bootstrap.sh" ]] && ok "Private bootstrap exists" || warn "Missing private bootstrap.sh"
+else
+  warn "Private dotfiles not installed"
+fi
+
+echo
+echo "=== Summary ==="
+printf "Errors: %d, Warnings: %d\n" "$errors" "$warnings"
+
+exit $errors

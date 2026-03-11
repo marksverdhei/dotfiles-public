@@ -1,0 +1,3 @@
+#!/bin/bash
+# Cycle master layout orientation (left -> top -> right -> bottom)
+hyprctl dispatch layoutmsg orientationcycle left top right bottom

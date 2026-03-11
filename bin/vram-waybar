@@ -1,0 +1,87 @@
+#!/bin/bash
+# VRAM (GPU memory) waybar indicator
+# Supports NVIDIA (nvidia-smi) and AMD (amdgpu hwmon)
+
+FILLED_CHAR="█"
+EMPTY_CHAR="░"
+
+build_bar() {
+    local percent=$1
+    local bar_len=$2
+    local filled=$((percent * bar_len / 100))
+    local empty=$((bar_len - filled))
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="$FILLED_CHAR"; done
+    for ((i=0; i<empty; i++)); do bar+="$EMPTY_CHAR"; done
+    echo "$bar"
+}
+
+# Try NVIDIA first
+if command -v nvidia-smi &>/dev/null; then
+    gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null)
+    if [[ $? -eq 0 && -n "$gpu_data" ]]; then
+        readarray -t gpu_lines <<< "$gpu_data"
+        num_gpus=${#gpu_lines[@]}
+        text=""
+        tooltip=""
+        max_percent=0
+
+        for i in "${!gpu_lines[@]}"; do
+            read -r used total <<< "$(echo "${gpu_lines[$i]}" | tr ',' ' ')"
+            used_gb=$(awk "BEGIN {printf \"%.1f\", $used / 1024}")
+            total_gb=$(awk "BEGIN {printf \"%.0f\", $total / 1024}")
+            percent=$(awk "BEGIN {printf \"%.0f\", ($used / $total) * 100}")
+            # Dynamic bar length: 1 char per 2 GB
+            gpu_bar_len=$(awk "BEGIN {v=int($total/2048+0.5); if(v<2) v=2; print v}")
+            [[ "$percent" -gt "$max_percent" ]] && max_percent="$percent"
+            bar=$(build_bar "$percent" "$gpu_bar_len")
+
+            if [[ "$num_gpus" -eq 1 ]]; then
+                text="<span font_size='6pt' letter_spacing='-1024'>${bar}</span> ${used_gb}/${total_gb} GB"
+                tooltip="VRAM: ${used_gb} / ${total_gb} GB (${percent}%)"
+            else
+                [[ -n "$text" ]] && text+=" │ "
+                text+="<span font_size='6pt' letter_spacing='-1024'>${bar}</span> ${used_gb}/${total_gb} GB"
+                [[ -n "$tooltip" ]] && tooltip+="\n"
+                tooltip+="GPU${i}: ${used_gb} / ${total_gb} GB (${percent}%)"
+            fi
+        done
+
+        if [[ "$max_percent" -lt 60 ]]; then CLASS="normal"
+        elif [[ "$max_percent" -lt 85 ]]; then CLASS="warning"
+        else CLASS="critical"; fi
+
+        printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$text" "$tooltip" "$CLASS"
+        exit 0
+    fi
+fi
+
+# Try AMD (amdgpu - uses sysfs)
+for card in /sys/class/drm/card*/device; do
+    used_file="$card/mem_info_vram_used"
+    total_file="$card/mem_info_vram_total"
+    if [[ -f "$used_file" && -f "$total_file" ]]; then
+        used=$(cat "$used_file")
+        total=$(cat "$total_file")
+        used_mb=$((used / 1024 / 1024))
+        total_mb=$((total / 1024 / 1024))
+        percent=$((used * 100 / total))
+        # Dynamic bar length: 1 char per 2 GB
+        amd_bar_len=$(awk "BEGIN {v=int($total_mb/2048+0.5); if(v<2) v=2; print v}")
+        bar=$(build_bar "$percent" "$amd_bar_len")
+
+        used_gb=$(awk "BEGIN {printf \"%.1f\", $used_mb / 1024}")
+        total_gb=$(awk "BEGIN {printf \"%.1f\", $total_mb / 1024}")
+
+        if [[ "$percent" -lt 60 ]]; then CLASS="normal"
+        elif [[ "$percent" -lt 85 ]]; then CLASS="warning"
+        else CLASS="critical"; fi
+
+        text="<span font_size='6pt' letter_spacing='-1024'>${bar}</span> ${used_gb}/${total_gb} GB"
+        printf '{"text": "%s", "tooltip": "VRAM: %s / %s GB (%d%%)", "class": "%s"}\n' \
+            "$text" "$used_gb" "$total_gb" "$percent" "$CLASS"
+        exit 0
+    fi
+done
+
+printf '{"text": "VRAM --", "tooltip": "VRAM unavailable", "class": "unavailable"}\n'

@@ -1,0 +1,609 @@
+#!/bin/bash
+
+# HuggingFace Dataset Editor
+# Interactive CLI for editing HF datasets in-memory using pandas DataFrames
+
+set -e
+
+# --- Dependency Checks ---
+check_deps() {
+    if ! command -v python3 &> /dev/null; then
+        echo "❌ Missing dependency: python3"
+        exit 1
+    fi
+
+    # Check Python packages
+    python3 - <<'EOF'
+import sys
+missing = []
+
+try:
+    import datasets
+except ImportError:
+    missing.append("datasets")
+
+try:
+    import pandas
+except ImportError:
+    missing.append("pandas")
+
+try:
+    import rich
+except ImportError:
+    missing.append("rich")
+
+try:
+    import questionary
+except ImportError:
+    missing.append("questionary")
+
+try:
+    import huggingface_hub
+except ImportError:
+    missing.append("huggingface_hub")
+
+try:
+    import pyarrow
+except ImportError:
+    missing.append("pyarrow")
+
+if missing:
+    print(f"❌ Missing Python packages: {', '.join(missing)}", file=sys.stderr)
+    print("   Install with: pip install " + " ".join(missing), file=sys.stderr)
+    sys.exit(1)
+EOF
+    if [[ $? -ne 0 ]]; then
+        exit 1
+    fi
+}
+
+# --- Main Python Script ---
+run_editor() {
+    local dataset_id="$1"
+
+    # Create temp file for Python script
+    local tmpfile=$(mktemp /tmp/hfed.XXXXXX.py)
+    trap "rm -f $tmpfile" EXIT
+
+    # Write Python script to temp file
+    cat > "$tmpfile" <<'EOF'
+import sys
+import os
+import tempfile
+import subprocess
+from datasets import load_dataset, Dataset
+from datasets.exceptions import DatasetNotFoundError
+import pandas as pd
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+import questionary
+from questionary import Style
+from huggingface_hub import HfApi, create_repo
+
+console = Console()
+
+# Custom style for questionary (gh-like colors)
+custom_style = Style([
+    ('qmark', 'fg:#673ab7 bold'),
+    ('question', 'bold'),
+    ('answer', 'fg:#f44336 bold'),
+    ('pointer', 'fg:#673ab7 bold'),
+    ('highlighted', 'fg:#673ab7 bold'),
+    ('selected', 'fg:#cc5454'),
+    ('separator', 'fg:#cc5454'),
+    ('instruction', ''),
+    ('text', ''),
+])
+
+def show_menu(options, title="Select an option"):
+    """Display an arrow-key navigable menu."""
+    return questionary.select(
+        title,
+        choices=options,
+        style=custom_style
+    ).ask()
+
+def display_dataframe(df, title="Dataset Preview"):
+    """Display DataFrame using rich table - shows first 6 rows with ... below."""
+    max_rows = 6
+    display_df = df.head(max_rows)
+
+    table = Table(title=title, show_lines=True)
+
+    # Add columns
+    for col in display_df.columns:
+        table.add_column(str(col), overflow="fold")
+
+    # Add rows
+    for _, row in display_df.iterrows():
+        table.add_row(*[str(val)[:100] for val in row])
+
+    # Add ... row if there are more rows
+    if len(df) > max_rows:
+        table.add_row(*["..." for _ in display_df.columns])
+
+    console.print(table)
+    console.print(f"[dim]Total: {len(df)} rows, {len(df.columns)} columns[/dim]")
+
+def select_column(df, prompt="Select column"):
+    """Let user select a column from the dataframe."""
+    return questionary.select(
+        prompt,
+        choices=list(df.columns),
+        style=custom_style
+    ).ask()
+
+def modify_columns_menu(df):
+    """Modify column values."""
+    col = select_column(df, "Select column to modify")
+    if not col:
+        return df
+
+    operation = show_menu(
+        ["Replace value", "Fill NaN values", "Map with Python expression", "Cancel"],
+        f"Operation on '{col}'"
+    )
+
+    if operation == "Cancel":
+        return df
+
+    if operation == "Replace value":
+        old_val = questionary.text("Value to replace:").ask()
+        new_val = questionary.text("New value:").ask()
+        df[col] = df[col].replace(old_val, new_val)
+        console.print(f"[green]✓[/green] Replaced '{old_val}' with '{new_val}' in column '{col}'")
+
+    elif operation == "Fill NaN values":
+        fill_val = questionary.text("Fill value:").ask()
+        df[col] = df[col].fillna(fill_val)
+        console.print(f"[green]✓[/green] Filled NaN values with '{fill_val}' in column '{col}'")
+
+    elif operation == "Map with Python expression":
+        console.print("[yellow]Enter Python expression (use 'x' for value)[/yellow]")
+        console.print("[dim]Example: x.upper() or x * 2[/dim]")
+        expr = questionary.text("Expression:").ask()
+
+        if expr:
+            try:
+                df[col] = df[col].map(lambda x: eval(expr))
+                console.print(f"[green]✓[/green] Applied expression to column '{col}'")
+            except Exception as e:
+                console.print(f"[red]✗[/red] Error: {e}")
+
+    return df
+
+def rename_columns_menu(df):
+    """Rename a column."""
+    col = select_column(df, "Select column to rename")
+    if not col:
+        return df
+
+    new_name = questionary.text("New column name:", default=col).ask()
+
+    if new_name and new_name != col:
+        df = df.rename(columns={col: new_name})
+        console.print(f"[green]✓[/green] Renamed '{col}' to '{new_name}'")
+
+    return df
+
+def convert_to_chat_menu(df):
+    """Convert dataset to chat messages format."""
+    import json
+
+    turns = []
+    system_prompt = None
+
+    # Helper to get column or template
+    def get_content_source(prompt_text):
+        choices = list(df.columns) + ["Custom template..."]
+        choice = questionary.select(
+            prompt_text,
+            choices=choices,
+            style=custom_style
+        ).ask()
+
+        if choice is None:
+            return None
+
+        if choice == "Custom template...":
+            console.print("[dim]Use {column_name} for placeholders[/dim]")
+            template = questionary.text("Template:").ask()
+            return ("template", template) if template else None
+        else:
+            return ("column", choice)
+
+    # Get system prompt first
+    system_input = questionary.text(
+        "System prompt (leave empty for none):",
+        default=""
+    ).ask()
+    if system_input:
+        system_prompt = system_input
+
+    # Get first turn pair
+    console.print("\n[bold]Turn 1[/bold]")
+    user_source = get_content_source("User message:")
+    if not user_source:
+        return df
+
+    assistant_source = get_content_source("Assistant message:")
+    if not assistant_source:
+        return df
+
+    turns.append(("user", user_source))
+    turns.append(("assistant", assistant_source))
+
+    # Loop for additional turns
+    while True:
+        action = show_menu(
+            ["Create column", "Add turn"],
+            "What next?"
+        )
+
+        if action == "Create column":
+            break
+        elif action == "Add turn":
+            turn_num = len(turns) // 2 + 1
+            console.print(f"\n[bold]Turn {turn_num}[/bold]")
+
+            user_source = get_content_source("User message:")
+            if not user_source:
+                continue
+
+            assistant_source = get_content_source("Assistant message:")
+            if not assistant_source:
+                continue
+
+            turns.append(("user", user_source))
+            turns.append(("assistant", assistant_source))
+
+    # Get column name
+    col_name = questionary.text(
+        "Column name:",
+        default="messages"
+    ).ask()
+
+    if not col_name:
+        return df
+
+    # Build messages column
+    def build_messages(row):
+        messages = []
+
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        for role, source in turns:
+            source_type, source_val = source
+            if source_type == "column":
+                content = str(row[source_val])
+            else:  # template
+                content = source_val.format(**row.to_dict())
+
+            messages.append({"role": role, "content": content})
+
+        return messages
+
+    try:
+        df[col_name] = df.apply(build_messages, axis=1)
+        num_turns = len(turns) // 2
+        console.print(f"[green]✓[/green] Created '{col_name}' column with {num_turns} turn(s)")
+
+        # Show sample
+        console.print("\n[yellow]Sample output:[/yellow]")
+        sample = df[col_name].iloc[0]
+        console.print(json.dumps(sample, indent=2)[:500])
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error: {e}")
+
+    input("\nPress Enter to continue...")
+    return df
+
+def prompt_template_menu(df):
+    """Apply prompt template to create/modify column."""
+    # Create example template with all columns listed
+    column_examples = '\n'.join([f"{col}: {{{col}}}" for col in df.columns])
+    example_template = f"""{column_examples}
+"""
+
+    # Create temporary file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write(example_template)
+        temp_file = f.name
+
+    try:
+        # Open in editor
+        editor = os.environ.get('EDITOR', 'vim')
+        # Use shell=True to handle complex editor commands with arguments
+        subprocess.run(f"{editor} {temp_file}", shell=True)
+
+        # Read template
+        with open(temp_file, 'r') as f:
+            template = f.read()
+
+        # Remove comment lines
+        template = '\n'.join(line for line in template.split('\n')
+                            if not line.strip().startswith('#'))
+        template = template.strip()
+
+        if not template:
+            console.print("[yellow]Template is empty, cancelled[/yellow]")
+            return df
+
+        # Show template preview
+        console.print(Panel(template, title="Template"))
+
+        # Ask for target column
+        target_col = questionary.text("Target column name (will be created or updated):").ask()
+
+        if not target_col:
+            return df
+
+        # Apply template
+        try:
+            df[target_col] = df.apply(lambda row: template.format(**row.to_dict()), axis=1)
+            console.print(f"[green]✓[/green] Applied template to column '{target_col}'")
+
+            # Show sample
+            console.print("\n[yellow]Sample output:[/yellow]")
+            for val in df[target_col].head(3):
+                console.print(f"  {val[:200]}")
+        except Exception as e:
+            console.print(f"[red]✗[/red] Error applying template: {e}")
+
+    finally:
+        os.unlink(temp_file)
+
+    return df
+
+def save_dataframe(df, dataset_id, all_splits_mode=False):
+    """Save the dataframe with user's choice of destination."""
+    mode = show_menu(
+        ["In-place (update original dataset)", "Local file", "Fork (new private dataset)", "Cancel"],
+        "Where to save?"
+    )
+
+    if mode == "Cancel":
+        console.print("[yellow]Save cancelled[/yellow]")
+        return
+
+    if mode == "In-place (update original dataset)":
+        # Convert to Dataset and push
+        try:
+            if all_splits_mode and "_split" in df.columns:
+                # Save each split separately
+                from datasets import DatasetDict
+                splits_dict = {}
+                for split_name in df["_split"].unique():
+                    split_df = df[df["_split"] == split_name].drop(columns=["_split"])
+                    splits_dict[split_name] = Dataset.from_pandas(split_df, preserve_index=False)
+                ds = DatasetDict(splits_dict)
+                console.print(f"[yellow]Pushing {len(splits_dict)} splits to {dataset_id}...[/yellow]")
+            else:
+                # Remove _split column if it exists (single split selected from all)
+                save_df = df.drop(columns=["_split"], errors="ignore")
+                ds = Dataset.from_pandas(save_df, preserve_index=False)
+                console.print(f"[yellow]Pushing to {dataset_id}...[/yellow]")
+
+            ds.push_to_hub(dataset_id)
+            console.print(f"[green]✓[/green] Dataset updated at {dataset_id}")
+        except Exception as e:
+            console.print(f"[red]✗[/red] Error: {e}")
+
+    elif mode == "Local file":
+        filename = questionary.text("Filename:", default="output.parquet").ask()
+
+        if filename:
+            try:
+                if filename.endswith('.csv'):
+                    df.to_csv(filename, index=False)
+                elif filename.endswith('.json'):
+                    df.to_json(filename, orient='records', lines=True)
+                else:
+                    df.to_parquet(filename, index=False)
+
+                console.print(f"[green]✓[/green] Saved to {filename}")
+            except Exception as e:
+                console.print(f"[red]✗[/red] Error: {e}")
+
+    elif mode == "Fork (new private dataset)":
+        api = HfApi()
+        try:
+            me = api.whoami()
+            username = me['name']
+        except:
+            console.print("[red]✗[/red] Not authenticated with HuggingFace")
+            return
+
+        fork_name = questionary.text("New dataset name:", default=f"{dataset_id.split('/')[-1]}-fork").ask()
+
+        if fork_name:
+            try:
+                new_id = f"{username}/{fork_name}"
+
+                # Create repo
+                console.print(f"[yellow]Creating private repository {new_id}...[/yellow]")
+                create_repo(new_id, repo_type="dataset", private=True, exist_ok=True)
+
+                # Push dataset
+                if all_splits_mode and "_split" in df.columns:
+                    from datasets import DatasetDict
+                    splits_dict = {}
+                    for split_name in df["_split"].unique():
+                        split_df = df[df["_split"] == split_name].drop(columns=["_split"])
+                        splits_dict[split_name] = Dataset.from_pandas(split_df, preserve_index=False)
+                    ds = DatasetDict(splits_dict)
+                    console.print(f"[yellow]Pushing {len(splits_dict)} splits...[/yellow]")
+                else:
+                    save_df = df.drop(columns=["_split"], errors="ignore")
+                    ds = Dataset.from_pandas(save_df, preserve_index=False)
+                    console.print(f"[yellow]Pushing dataset...[/yellow]")
+
+                ds.push_to_hub(new_id)
+                console.print(f"[green]✓[/green] Created private fork at {new_id}")
+            except Exception as e:
+                console.print(f"[red]✗[/red] Error: {e}")
+
+def main():
+    dataset_id = sys.argv[1]
+
+    # Show header
+    console.print(Panel(f"🤗 HuggingFace Dataset Editor\nDataset: {dataset_id}",
+                       border_style="magenta"))
+
+    # Load dataset
+    try:
+        console.print(f"[yellow]Loading dataset {dataset_id}...[/yellow]")
+        dataset = None
+        direct_load_mode = False
+
+        try:
+            dataset = load_dataset(dataset_id)
+        except Exception as e:
+            # If loading fails, try loading parquet files directly
+            console.print(f"[yellow]⚠[/yellow] load_dataset failed: {e}")
+            console.print(f"[yellow]Trying direct parquet load...[/yellow]")
+
+            try:
+                from huggingface_hub import HfFileSystem
+                fs = HfFileSystem()
+
+                # Find parquet files
+                parquet_files = fs.glob(f"datasets/{dataset_id}/**/*.parquet")
+                if not parquet_files:
+                    raise Exception("No parquet files found in dataset")
+
+                # Group by split (based on directory or filename)
+                splits_data = {}
+                for pf in parquet_files:
+                    # Try to extract split name from path
+                    parts = pf.split("/")
+                    # Common patterns: .../train/0000.parquet or .../data/train-00000.parquet
+                    split_name = "train"  # default
+                    for part in parts:
+                        if part in ["train", "test", "validation", "dev"]:
+                            split_name = part
+                            break
+                        if "-" in part and part.endswith(".parquet"):
+                            split_name = part.split("-")[0]
+                            break
+
+                    if split_name not in splits_data:
+                        splits_data[split_name] = []
+                    splits_data[split_name].append(pf)
+
+                # Load as dict of DataFrames
+                dataset = {}
+                for split_name, files in splits_data.items():
+                    dfs = [pd.read_parquet(fs.open(f)) for f in files]
+                    dataset[split_name] = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+
+                direct_load_mode = True
+                console.print(f"[green]✓[/green] Loaded via direct parquet access")
+            except Exception as e2:
+                console.print(f"[red]✗[/red] Direct load also failed: {e2}")
+                raise e
+
+        # Handle splits
+        all_splits_mode = False
+        if direct_load_mode:
+            splits = list(dataset.keys())
+        else:
+            splits = list(dataset.keys())
+
+        def get_split_df(split_name):
+            """Get DataFrame for a split, handling both Dataset and direct DataFrame."""
+            data = dataset[split_name]
+            if isinstance(data, pd.DataFrame):
+                return data
+            else:
+                return data.to_pandas()
+
+        if len(splits) > 1:
+            choices = ["All splits"] + splits
+            split = show_menu(choices, "Select split")
+
+            if split == "All splits":
+                all_splits_mode = True
+                # Combine all splits with a _split column
+                dfs = []
+                for s in splits:
+                    split_df = get_split_df(s)
+                    split_df["_split"] = s
+                    dfs.append(split_df)
+                df = pd.concat(dfs, ignore_index=True)
+                split = None
+            else:
+                df = get_split_df(split)
+        else:
+            split = splits[0]
+            df = get_split_df(split)
+
+        if all_splits_mode:
+            console.print(f"[green]✓[/green] Loaded all splits: {len(df)} total rows, {len(df.columns)} columns")
+        else:
+            console.print(f"[green]✓[/green] Loaded {len(df)} rows, {len(df.columns)} columns")
+
+    except DatasetNotFoundError:
+        console.print(f"[red]✗[/red] Dataset '{dataset_id}' not found")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error loading dataset: {e}")
+        sys.exit(1)
+
+    # Main menu loop - show table + menu together
+    while True:
+        # Clear screen and show table at top
+        console.clear()
+        mode_label = " (all splits)" if all_splits_mode else f" ({split})"
+        console.print(Panel(f"🤗 HuggingFace Dataset Editor - {dataset_id}{mode_label}",
+                           border_style="magenta"))
+        display_dataframe(df)
+
+        # Show menu below the table
+        try:
+            action = show_menu(
+                ["Modify columns", "Rename column", "Prompt template", "Convert to chat format", "Save & Exit", "Exit without saving"],
+                "Select Operation"
+            )
+        except KeyboardInterrupt:
+            break
+
+        if action == "Modify columns":
+            df = modify_columns_menu(df)
+        elif action == "Rename column":
+            df = rename_columns_menu(df)
+        elif action == "Prompt template":
+            df = prompt_template_menu(df)
+        elif action == "Convert to chat format":
+            df = convert_to_chat_menu(df)
+        elif action == "Save & Exit":
+            save_dataframe(df, dataset_id, all_splits_mode)
+            break
+        elif action == "Exit without saving":
+            if questionary.confirm("Exit without saving changes?").ask():
+                console.print("[yellow]Exited without saving[/yellow]")
+                break
+
+if __name__ == "__main__":
+    main()
+EOF
+
+    # Execute the Python script with dataset_id as argument
+    python3 "$tmpfile" "$dataset_id"
+}
+
+# --- Entry Point ---
+main() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: hfed <dataset-id>"
+        echo "Example: hfed username/my-dataset"
+        exit 1
+    fi
+
+    check_deps
+    run_editor "$1"
+}
+
+main "$@"

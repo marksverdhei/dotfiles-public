@@ -1,0 +1,102 @@
+#!/bin/bash
+
+# --- Configuration ---
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/hf-fzf"
+# We use a separate cache file for datasets
+CACHE_FILE="$CACHE_DIR/datasets.tsv"
+mkdir -p "$CACHE_DIR"
+
+# Check dependencies
+if ! command -v fzf &> /dev/null; then
+    echo "❌ Error: fzf is not installed."
+    exit 1
+fi
+
+# --- Python Fetcher Function (Datasets Version) ---
+fetch_data_stream() {
+    python3 - <<'EOF'
+import sys
+import concurrent.futures
+import signal
+from huggingface_hub import HfApi
+
+# Handle SIGPIPE to allow clean exit if fzf closes
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+def run():
+    api = HfApi()
+    
+    # 1. Auth Check
+    try:
+        me = api.whoami()
+        username = me['name']
+        orgs = [o['name'] for o in me.get('orgs', [])]
+    except Exception:
+        return
+
+    # 2. Worker Functions (Targeting DATASETS)
+    # Using slightly different colors for distinction (Cyan/Magenta)
+    def list_user():
+        # api.list_datasets matches list_models signature
+        return [(d.id, "\033[36m👤 Your Dataset\033[0m") for d in api.list_datasets(author=username, limit=1000)]
+
+    def list_org(org):
+        return [(d.id, f"\033[35m🏢 {org}\033[0m") for d in api.list_datasets(author=org, limit=1000)]
+
+    def list_cols(owner):
+        res = []
+        try:
+            for col in api.list_collections(owner=owner):
+                full = api.get_collection(col.slug)
+                for item in full.items:
+                    # FILTER: Only Datasets
+                    if item.item_type == 'dataset':
+                        res.append((item.item_id, f"\033[32m📂 {col.title}\033[0m"))
+        except: pass
+        return res
+
+    # 3. Async Execution
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        futures.append(executor.submit(list_user))
+        for org in orgs:
+            futures.append(executor.submit(list_org, org))
+        futures.append(executor.submit(list_cols, username))
+        for org in orgs:
+            futures.append(executor.submit(list_cols, org))
+
+        seen = set()
+
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                items = future.result()
+                for did, source in items:
+                    if did not in seen:
+                        seen.add(did)
+                        # Print immediately for tee/fzf
+                        print(f"{did}\t[{source}]", flush=True)
+            except Exception:
+                pass
+if __name__ == "__main__":
+    run()
+EOF
+}
+
+# --- Main Logic ---
+
+REFRESH=0
+if [[ "$1" == "-r" || "$1" == "--refresh" ]]; then
+    REFRESH=1
+fi
+
+# Header changed to "DATASET ID"
+FZF_CMD="fzf --height=40% --layout=reverse --border --prompt='Dataset > ' --delimiter=$'\t' --header='   DATASET ID                               SOURCE' --ansi"
+
+if [[ -f "$CACHE_FILE" && "$REFRESH" -eq 0 ]]; then
+    # Read from cache
+    cat "$CACHE_FILE" | eval "$FZF_CMD" | cut -f1
+else
+    # Fetch -> Cache -> Display
+    echo "⬇️  Fetching Datasets..." >&2
+    fetch_data_stream | tee "$CACHE_FILE" | eval "$FZF_CMD" | cut -f1
+fi

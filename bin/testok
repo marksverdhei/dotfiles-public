@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+from transformers import AutoTokenizer
+import IPython
+import sys
+
+default_text = "The quick brown fox is dead."
+default_path = "."
+
+norp = sys.argv[1] if len(sys.argv) > 1 else default_path
+text = sys.argv[2] if len(sys.argv) > 2 else default_text
+
+t = tokenizer = AutoTokenizer.from_pretrained(norp)
+print(f"{t=}")
+print(f"{t.decode(t.encode(text))=}")
+print(t.convert_ids_to_tokens(t.encode(text)))
+
+try:
+    messages = [
+            {"role": "user", "content": "Who are you?"},
+            ]
+    formatted = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            )
+    print(formatted)
+    messages = [
+        {"role": "user", "content": "Who are you?"},
+        {"role": "assistant", "content": "Who are you?"},
+    ]
+    formatted = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+    )
+    print(formatted)
+except Exception as e:
+    print(e)
+
+IPython.embed()

@@ -1,0 +1,35 @@
+#!/bin/bash
+# Launch Alacritty with a unique, bold background tint per instance
+# Colors cycle deterministically - each terminal gets the next color
+
+# Bold, saturated dark colors - visually distinct from each other
+colors=(
+  "#4a1942"  # magenta
+  "#1a4a2e"  # forest green
+  "#4a2a1a"  # burnt orange/brown
+  "#1a2a4a"  # deep blue
+  "#4a1a1a"  # deep red
+  "#1a4a4a"  # teal
+  "#3a1a4a"  # purple
+  "#4a4a1a"  # olive/gold
+  "#1a3a3a"  # dark cyan
+  "#3a2a1a"  # chocolate
+  "#2a1a3a"  # indigo
+  "#1a4a1a"  # green
+)
+
+# Counter file for deterministic cycling
+COUNTER_FILE="${XDG_RUNTIME_DIR:-/tmp}/alacritty-color-index"
+
+# Read current index, default to 0
+if [[ -f "$COUNTER_FILE" ]]; then
+  INDEX=$(cat "$COUNTER_FILE")
+else
+  INDEX=0
+fi
+
+# Get color and increment
+COLOR=${colors[$INDEX % ${#colors[@]}]}
+echo $(( (INDEX + 1) % ${#colors[@]} )) > "$COUNTER_FILE"
+
+exec alacritty -o "colors.primary.background='${COLOR}'" "$@"

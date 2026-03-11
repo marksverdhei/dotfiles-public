@@ -1,0 +1,20 @@
+#!/bin/bash
+# Launch an app and swap it into the current window's position
+
+# Get current window address
+CURRENT=$(hyprctl activewindow -j | jq -r '.address')
+WORKSPACE=$(hyprctl activewindow -j | jq -r '.workspace.id')
+
+# Launch the app
+$@ &
+
+# Wait for new window to appear on same workspace
+for i in {1..50}; do
+    sleep 0.05
+    NEW=$(hyprctl clients -j | jq -r ".[] | select(.workspace.id == $WORKSPACE and .address != \"$CURRENT\" and .focusHistoryID == 0) | .address" | head -1)
+    if [[ -n "$NEW" && "$NEW" != "null" ]]; then
+        # Swap the windows
+        hyprctl dispatch swapwindow address:$CURRENT
+        exit 0
+    fi
+done

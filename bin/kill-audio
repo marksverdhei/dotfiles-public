@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Kill active audio playback streams via PipeWire
+# Usage:
+#   kill-audio          # interactive picker (fzf)
+#   kill-audio all      # kill all playback streams
+#   kill-audio <name>   # kill streams matching name (case-insensitive)
+
+set -euo pipefail
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  echo "Usage: kill-audio [all | <name>]"
+  echo "  kill-audio          interactive picker (fzf, TAB for multi-select)"
+  echo "  kill-audio all      kill all playback streams"
+  echo "  kill-audio <name>   kill streams matching name (case-insensitive)"
+  exit 0
+fi
+
+list_streams() {
+  pw-dump 2>/dev/null | python3 -c "
+import json, sys
+nodes = json.load(sys.stdin)
+for n in nodes:
+    if n.get('type') == 'PipeWire:Interface:Node':
+        props = n.get('info', {}).get('props', {})
+        media_class = props.get('media.class', '')
+        if 'Stream/Output/Audio' in media_class:
+            app = props.get('application.name', props.get('node.name', 'unknown'))
+            pid = props.get('application.process.id', '?')
+            node_id = n.get('id')
+            media = props.get('media.name', '')
+            line = f'{node_id}\t{app}\t{pid}\t{media}'
+            print(line)
+"
+}
+
+kill_node() {
+  local node_id="$1" app="$2"
+  if pw-cli destroy "$node_id" 2>/dev/null; then
+    echo "Killed: $app (node $node_id)"
+  else
+    echo "Failed to kill: $app (node $node_id)" >&2
+  fi
+}
+
+streams=$(list_streams)
+
+if [[ -z "$streams" ]]; then
+  echo "No active audio streams."
+  exit 0
+fi
+
+if [[ "${1:-}" == "all" ]]; then
+  while IFS=$'\t' read -r node_id app pid media; do
+    kill_node "$node_id" "$app"
+  done <<< "$streams"
+  exit 0
+fi
+
+if [[ -n "${1:-}" ]]; then
+  pattern="$1"
+  matched=false
+  while IFS=$'\t' read -r node_id app pid media; do
+    if echo "$app $media" | grep -qi "$pattern"; then
+      kill_node "$node_id" "$app"
+      matched=true
+    fi
+  done <<< "$streams"
+  if ! $matched; then
+    echo "No streams matching '$pattern'."
+    exit 1
+  fi
+  exit 0
+fi
+
+# Interactive mode with fzf
+selection=$(echo "$streams" | while IFS=$'\t' read -r node_id app pid media; do
+  label="$app"
+  [[ -n "$media" ]] && label="$app — $media"
+  [[ "$pid" != "?" ]] && label="$label (pid $pid)"
+  echo -e "$node_id\t$label"
+done | fzf --multi --with-nth=2.. --delimiter=$'\t' \
+           --header="Select streams to kill (TAB=multi, ENTER=confirm)" \
+           --prompt="kill> ") || exit 0
+
+while IFS=$'\t' read -r node_id label; do
+  kill_node "$node_id" "$label"
+done <<< "$selection"

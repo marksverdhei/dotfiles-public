@@ -1,0 +1,54 @@
+#!/bin/bash
+COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), 'blue') if os.path.exists(f) else 'blue')")
+
+tmux set -g status-bg default
+tmux set -g status-style "bg=default,fg=default"
+
+# Reset status-left/right
+tmux set -g status-left ""
+tmux set -g status-right ""
+
+# Set window formats
+tmux set -g window-status-current-format ""
+tmux set -g window-status-format ""
+tmux set -g window-status-separator ""
+
+tmux set -g pane-active-border-style "fg=$COLOR"
+tmux set -g message-style "bg=default,fg=$COLOR"
+tmux set -g message-command-style "bg=default,fg=$COLOR"
+tmux set -g mode-style "bg=$COLOR,fg=black"
+tmux setw -g clock-mode-colour "$COLOR"
+
+# Left side with black background for Session Name
+LEFT_LINE="#[align=left]#[bg=black,fg=$COLOR] #S #[bg=default,fg=$COLOR]── "
+
+# Smart Window Deduplication:
+# If window name == session name, omit the window name (just show ID).
+# If process name == window name, omit the process name.
+WIN_INACTIVE="#{?#{==:#W,#S},#[fg=brightblack]#I,#[fg=brightblack]#I:#W}"
+
+# Construct the active window format conditionally:
+# Base is just #I if #W == #S, else #I:#W
+BASE_ACTIVE="#{?#{==:#W,#S},#[fg=brightblue,bold]#I,#[fg=brightblue,bold]#I:#W}"
+# Suffix is empty if process == #W, else :process
+PROC_SUFFIX="#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}}"
+
+WIN_ACTIVE="${BASE_ACTIVE}${PROC_SUFFIX}"
+
+WINDOWS="#{W:$WIN_INACTIVE ,$WIN_ACTIVE }"
+
+# The dynamic gap fill
+FILL_LINE="#[align=centre]#[fg=$COLOR]#{R:─,#{client_width}}"
+
+# Right side
+RIGHT_EDGE="#[align=right]#[fg=$COLOR]── "
+HOSTNAME_BLOCK="#[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR]"
+RIGHT_TAIL=" ──"
+
+# Combine status format
+tmux set -g status-format[0] "${LEFT_LINE}${WINDOWS}${FILL_LINE}${RIGHT_EDGE}${HOSTNAME_BLOCK}${RIGHT_TAIL}"
+
+# Top pane border with black background
+if tmux show-options -g | grep -q "pane-border-status top"; then
+  tmux set -g pane-border-format "#[bg=black] #{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #P: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}} #[bg=default,fg=default]"
+fi

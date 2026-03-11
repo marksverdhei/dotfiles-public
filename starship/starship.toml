@@ -1,0 +1,46 @@
+add_newline = true
+command_timeout = 200
+
+# Line 1: OS (Shell if not bash) Hostname Path Branch Python
+# Line 2: ❯
+format = """
+$hostname$directory$git_branch$python
+$character"""
+
+palette = "default"
+
+[palettes.default]
+white = "#f7f7f7"
+black = "#111111"
+os_bg = "#464646"
+session_bg = "#7aa2f7"
+git_bg = "#ffffd6"
+python_bg = "#d6ffd6"
+status_fg = "#81ff91"
+status_err = "#ff3030"
+path_bg = "#4a6a4a"
+
+[hostname]
+disabled = false
+ssh_only = false
+format = "[ $hostname ](bg:session_bg fg:black)"
+
+[git_branch]
+format = "[ \ue0a0 $branch ](bg:git_bg fg:black)"
+
+[git_status]
+disabled = true
+
+[python]
+format = "[ \ue606 $virtualenv ](bg:python_bg fg:black)"
+detect_extensions = []
+detect_files = []
+
+[directory]
+truncation_length = 0
+truncate_to_repo = false
+format = "[ $path ](bg:path_bg fg:white)"
+
+[character]
+success_symbol = "[❯](status_fg)"
+error_symbol = "[❯](status_err)"

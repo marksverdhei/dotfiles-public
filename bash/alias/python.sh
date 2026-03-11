@@ -1,0 +1,17 @@
+alias vv='source .venv/bin/activate'
+alias uva='uv add'
+alias uvin='uv init'
+alias uvp='uv pip'
+alias uvpi='uv pip install'
+alias uvpip='uv pip install'
+alias uvr='uv run'
+alias uvs='uv sync'
+alias uvv='uv venv'
+
+alias tcheck='python -c "import torch; print(f\"pytorch found {torch.cuda.device_count()} CUDA devices:\n{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}\")"'
+alias gv='source $HOME/.venv/bin/activate'
+alias vg='source $HOME/.venv/bin/activate'
+
+alias uvps='uv pip show'
+alias uvpicu13='uv pip install --index-url https://download.pytorch.org/whl/cu130 torch'
+alias uvpicu13a='uv pip install --index-url https://download.pytorch.org/whl/cu130 torch torchvision torchaudio torchao'

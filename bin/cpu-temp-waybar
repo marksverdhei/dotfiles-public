@@ -1,0 +1,21 @@
+#!/bin/bash
+# CPU Temperature waybar indicator
+# Green < 60C, Yellow 60-80C, Red > 80C
+
+TEMP=$(sensors 2>/dev/null | awk '/^Tctl:/ {gsub(/[+°C]/, "", $2); print int($2)}')
+
+if [[ -z "$TEMP" ]]; then
+    printf '{"text": "󰍛 --", "tooltip": "CPU temperature unavailable", "class": "unavailable"}\n'
+    exit 0
+fi
+
+# Determine class based on temperature
+if [[ "$TEMP" -lt 60 ]]; then
+    CLASS="cool"
+elif [[ "$TEMP" -lt 80 ]]; then
+    CLASS="warm"
+else
+    CLASS="hot"
+fi
+
+printf '{"text": "󰍛 %d°", "tooltip": "CPU: %d°C", "class": "%s"}\n' "$TEMP" "$TEMP" "$CLASS"

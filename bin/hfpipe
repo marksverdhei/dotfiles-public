@@ -1,0 +1,117 @@
+#!/bin/bash
+
+PIPELINE_TYPES=(
+    "text-generation"
+    "text-classification"
+    "token-classification"
+    "question-answering"
+    "fill-mask"
+    "summarization"
+    "translation"
+    "text2text-generation"
+    "image-classification"
+    "image-to-text"
+    "object-detection"
+    "zero-shot-classification"
+    "automatic-speech-recognition"
+    "image-segmentation"
+    "depth-estimation"
+)
+
+# Select model using hfm
+MODEL=$(hfm)
+
+if [[ -z "$MODEL" ]]; then
+    echo "❌ No model selected."
+    exit 1
+fi
+
+echo "🔍 Detecting model type for: $MODEL"
+
+# Try to auto-detect model type from HuggingFace API
+# Returns: "sentence_transformer" or pipeline_tag or empty
+MODEL_INFO=$(python3 - "$MODEL" <<'EOF'
+from huggingface_hub import HfApi
+import sys
+
+model = sys.argv[1]
+api = HfApi()
+try:
+    model_info = api.model_info(model)
+    # Check if it's a sentence-transformers model
+    if model_info.library_name == "sentence-transformers":
+        print("sentence_transformer")
+    elif model_info.pipeline_tag:
+        print(model_info.pipeline_tag)
+except:
+    pass
+EOF
+)
+
+# Handle sentence_transformer models
+if [[ "$MODEL_INFO" == "sentence_transformer" ]]; then
+    echo "🚀 Loading SentenceTransformer: $MODEL"
+    exec python3 - "$MODEL" <<'EOF'
+from sentence_transformers import SentenceTransformer
+import IPython
+import sys
+import os
+
+model_name = sys.argv[1]
+model = SentenceTransformer(model_name)
+
+# Demo sentences
+sentences = [
+    "That is a happy person",
+    "That is a happy dog",
+    "That is a very happy person",
+    "Today is a sunny day"
+]
+embeddings = model.encode(sentences)
+similarities = model.similarity(embeddings, embeddings)
+
+print(f"\n✅ SentenceTransformer loaded: {model_name}")
+print(f"   Embedding dim: {embeddings.shape[1]}")
+print(f"\n📊 Demo similarity matrix shape: {similarities.shape}")
+print(f"   Sentences: {sentences}\n")
+
+# Reopen stdin from tty for IPython
+sys.stdin = open('/dev/tty')
+IPython.embed()
+EOF
+    exit 0
+fi
+
+PIPE_TYPE="$MODEL_INFO"
+
+# Fallback to gum selection if detection failed
+if [[ -z "$PIPE_TYPE" ]]; then
+    echo "⚠️  Could not auto-detect pipeline type. Please select:"
+    PIPE_TYPE=$(printf '%s\n' "${PIPELINE_TYPES[@]}" | gum filter --placeholder="Select pipeline type...")
+
+    if [[ -z "$PIPE_TYPE" ]]; then
+        echo "❌ No pipeline type selected."
+        exit 1
+    fi
+fi
+
+echo "🚀 Loading pipeline: $PIPE_TYPE with model: $MODEL"
+
+# Run Python with the selected options
+exec python3 - "$PIPE_TYPE" "$MODEL" <<'EOF'
+from transformers import pipeline
+import IPython
+import sys
+
+pipe_type = sys.argv[1]
+model = sys.argv[2]
+
+pipe = pipeline(pipe_type, model)
+print(f"\n✅ Pipeline loaded: {pipe}")
+print(f"   Type: {pipe_type}")
+print(f"   Model: {model}\n")
+
+# Reopen stdin from tty for IPython
+sys.stdin = open('/dev/tty')
+IPython.embed()
+EOF

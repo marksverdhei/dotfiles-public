@@ -1,0 +1,38 @@
+#!/bin/bash
+# RAM usage waybar indicator with visual bar and GB display
+# Bar length scales dynamically: 1 char per GB of total RAM
+
+FILLED_CHAR="█"
+EMPTY_CHAR="░"
+
+# Get memory info in GB
+read -r total used <<< $(free -b | awk '/^Mem:/ {printf "%.1f %.1f", $2/1073741824, $3/1073741824}')
+
+# Dynamic bar length: 1 char per 2 GB (minimum 2)
+BAR_LENGTH=$(awk "BEGIN {v=int($total/2+0.5); if(v<2) v=2; print v}")
+
+# Calculate percentage for bar
+percent=$(awk "BEGIN {printf \"%.0f\", ($used / $total) * 100}")
+
+# Build the bar
+filled=$((percent * BAR_LENGTH / 100))
+empty=$((BAR_LENGTH - filled))
+
+bar=""
+for ((i=0; i<filled; i++)); do bar+="$FILLED_CHAR"; done
+for ((i=0; i<empty; i++)); do bar+="$EMPTY_CHAR"; done
+
+# Determine class based on usage
+if [[ "$percent" -lt 60 ]]; then
+    CLASS="normal"
+elif [[ "$percent" -lt 85 ]]; then
+    CLASS="warning"
+else
+    CLASS="critical"
+fi
+
+# Format: bar (tiny via Pango) + used/total GB (normal size)
+text=$(printf "<span font_size='6pt' letter_spacing='-1024'>%s</span> %s/%s GB" "$bar" "$used" "${total%.*}")
+
+printf '{"text": "%s", "tooltip": "RAM: %s / %s GB (%d%%)", "class": "%s"}\n' \
+    "$text" "$used" "$total" "$percent" "$CLASS"

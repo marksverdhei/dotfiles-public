@@ -1,0 +1,43 @@
+#!/bin/bash
+# Disk space waybar module with visual bar
+# Usage: disk-waybar <mountpoint> <label>
+
+MOUNT="${1:-/}"
+LABEL="${2:-󰋊}"
+
+BAR_LENGTH=4
+FILLED_CHAR="█"
+EMPTY_CHAR="░"
+
+# Get disk info
+read -r SIZE USED AVAIL PERCENT MOUNT_PATH < <(df -h "$MOUNT" 2>/dev/null | tail -1 | awk '{print $2, $3, $4, $5, $6}')
+
+if [[ -z "$SIZE" ]] || ! mountpoint -q "$MOUNT" 2>/dev/null; then
+    echo '{"text": "", "class": "hidden"}'
+    exit 0
+fi
+
+# Remove % sign for calculation
+PCT_NUM="${PERCENT%\%}"
+
+# Build the bar
+filled=$((PCT_NUM * BAR_LENGTH / 100))
+empty=$((BAR_LENGTH - filled))
+
+bar=""
+for ((i=0; i<filled; i++)); do bar+="$FILLED_CHAR"; done
+for ((i=0; i<empty; i++)); do bar+="$EMPTY_CHAR"; done
+
+# Set class based on usage
+if (( PCT_NUM >= 90 )); then
+    CLASS="critical"
+elif (( PCT_NUM >= 75 )); then
+    CLASS="warning"
+else
+    CLASS="normal"
+fi
+
+# Format: label bar used/total
+text=$(printf "%s %s %s/%s" "$LABEL" "$bar" "$USED" "$SIZE")
+
+echo "{\"text\": \"$text\", \"tooltip\": \"$MOUNT_PATH: $USED used of $SIZE ($PERCENT)\n$AVAIL available\", \"class\": \"$CLASS\", \"percentage\": $PCT_NUM}"

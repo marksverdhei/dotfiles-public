@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# --- Dependencies Check ---
+if ! command -v gum &> /dev/null; then
+    echo "❌ Error: 'gum' is not installed."
+    echo "  > brew install gum  (or)  go install github.com/charmbracelet/gum@latest"
+    exit 1
+fi
+
+# Ensure our worker binaries exist
+if ! command -v hfm &> /dev/null || ! command -v hfd &> /dev/null; then
+    echo "❌ Error: You need 'hfm' and 'hfd' in your PATH to use this wrapper."
+    exit 1
+fi
+
+# --- The TUI ---
+
+# 1. Title
+gum style \
+	--border normal \
+	--margin "1" \
+	--padding "1 2" \
+	--border-foreground 212 \
+	"🤗 Hugging Face Finder" >&2
+
+# 2. Selection Menu
+CHOICE=$(gum choose \
+    --cursor.foreground 212 \
+    --header "Select Resource Type" \
+    "Models   🧠" \
+    "Datasets 📊")
+
+# 3. Routing
+case "$CHOICE" in
+    "Models   🧠")
+        exec hfm "$@" 
+        ;;
+    "Datasets 📊")
+        exec hfd "$@"
+        ;;
+    *)
+        exit 1
+        ;;
+esac

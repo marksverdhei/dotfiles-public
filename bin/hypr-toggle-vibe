@@ -1,0 +1,26 @@
+#!/bin/bash
+# Toggle between vibe mode (glass/transparent) and normal mode (solid)
+# Persists state to looknfeel.conf so hyprctl reload preserves it
+
+CONF="$HOME/.config/hypr/looknfeel.conf"
+CURRENT=$(hyprctl getoption decoration:inactive_opacity -j | jq -r '.float')
+
+if (( $(echo "$CURRENT < 1.0" | bc -l) )); then
+    # Currently in vibe mode, switch to normal
+    hyprctl keyword decoration:active_opacity 1.0
+    hyprctl keyword decoration:inactive_opacity 1.0
+    hyprctl keyword decoration:blur:enabled false
+    sed -i 's/active_opacity = .*/active_opacity = 1.0/' "$CONF"
+    sed -i 's/inactive_opacity = .*/inactive_opacity = 1.0/' "$CONF"
+    sed -i 's/enabled = .*/enabled = false/' "$CONF"
+    echo "Normal mode"
+else
+    # Currently normal, switch to vibe mode (glass effect)
+    hyprctl keyword decoration:active_opacity 1.0
+    hyprctl keyword decoration:inactive_opacity 0.9
+    hyprctl keyword decoration:blur:enabled true
+    sed -i 's/active_opacity = .*/active_opacity = 1.0/' "$CONF"
+    sed -i 's/inactive_opacity = .*/inactive_opacity = 0.9/' "$CONF"
+    sed -i 's/enabled = .*/enabled = true/' "$CONF"
+    echo "Vibe mode (Glass Effect)"
+fi

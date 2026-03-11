@@ -1,0 +1,49 @@
+#!/bin/bash
+# GPU Temperature waybar indicator
+# Supports NVIDIA (nvidia-smi) and AMD (hwmon)
+# Green < 60C, Yellow 60-80C, Red > 80C
+
+# Try NVIDIA first
+if command -v nvidia-smi &>/dev/null; then
+    temps=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
+    if [[ $? -eq 0 && -n "$temps" ]]; then
+        readarray -t temp_arr <<< "$temps"
+        num_gpus=${#temp_arr[@]}
+        max_temp=0
+        for t in "${temp_arr[@]}"; do
+            [[ "$t" -gt "$max_temp" ]] && max_temp="$t"
+        done
+
+        if [[ "$max_temp" -lt 60 ]]; then CLASS="cool"
+        elif [[ "$max_temp" -lt 80 ]]; then CLASS="warm"
+        else CLASS="hot"; fi
+
+        if [[ "$num_gpus" -eq 1 ]]; then
+            text="󰢮 ${temp_arr[0]}°"
+            tooltip="GPU: ${temp_arr[0]}°C"
+        else
+            text="󰢮 ${temp_arr[0]}° 󰢮 ${temp_arr[1]}°"
+            tooltip="GPU0: ${temp_arr[0]}°C\nGPU1: ${temp_arr[1]}°C"
+        fi
+
+        printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$text" "$tooltip" "$CLASS"
+        exit 0
+    fi
+fi
+
+# Try AMD (amdgpu hwmon)
+for hwmon in /sys/class/drm/card*/device/hwmon/hwmon*/temp1_input; do
+    if [[ -f "$hwmon" ]]; then
+        temp_mc=$(cat "$hwmon")
+        temp=$((temp_mc / 1000))
+
+        if [[ "$temp" -lt 60 ]]; then CLASS="cool"
+        elif [[ "$temp" -lt 80 ]]; then CLASS="warm"
+        else CLASS="hot"; fi
+
+        printf '{"text": "󰢮 %d°", "tooltip": "GPU: %d°C", "class": "%s"}\n' "$temp" "$temp" "$CLASS"
+        exit 0
+    fi
+done
+
+printf '{"text": "󰢮 --", "tooltip": "GPU temperature unavailable", "class": "unavailable"}\n'
