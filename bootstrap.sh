@@ -33,6 +33,12 @@ else
   rm -f "$PRIVATE_FLAG"
 fi
 
+# ── Self-bootstrap: clone repo if not present ─
+if [[ ! -d "$DOTFILES/.git" ]]; then
+  echo "Cloning dotfiles..."
+  git clone https://github.com/marksverdhei/dotfiles-public "$DOTFILES"
+fi
+
 . "$DOTFILES/bootstrap/tools.bash"
 . "$DOTFILES/bootstrap/ui.bash"
 

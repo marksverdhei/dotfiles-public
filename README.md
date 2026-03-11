@@ -5,6 +5,12 @@ Public dotfiles with optional private extension. Designed for [Omarchy](https://
 ## Quick Start
 
 ```bash
+bash <(curl -sL https://raw.githubusercontent.com/marksverdhei/dotfiles-public/main/bootstrap.sh)
+```
+
+Or clone manually:
+
+```bash
 git clone https://github.com/marksverdhei/dotfiles-public ~/dotfiles
 cd ~/dotfiles && ./bootstrap.sh
 ```
