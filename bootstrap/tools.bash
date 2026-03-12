@@ -38,10 +38,26 @@ slink() {
 
     mkdir -p "$(dirname "$link_name")"
 
-    # Back up existing regular files (not symlinks) before overwriting
+    # Already a correct symlink — nothing to do
+    if [[ -L "$link_name" && "$(readlink -f "$link_name")" == "$(readlink -f "$target")" ]]; then
+        _slink_count=$((_slink_count + 1))
+        return 0
+    fi
+
+    # Same file (hardlink) — replace with symlink, no backup needed
+    if [[ -f "$link_name" && ! -L "$link_name" && -f "$target" ]]; then
+        if [[ "$(stat -c %i "$link_name")" == "$(stat -c %i "$target")" ]]; then
+            rm "$link_name"
+            ln -sfn "$target" "$link_name"
+            _slink_count=$((_slink_count + 1))
+            return 0
+        fi
+    fi
+
+    # Back up existing regular files/dirs (not symlinks) before overwriting
     if [[ -e "$link_name" && ! -L "$link_name" ]]; then
         local backup="${link_name}.bak.$(date +%s)"
-        cp -a "$link_name" "$backup"
+        mv "$link_name" "$backup"
         warn "slink: backed up $link_name → $backup"
     fi
 

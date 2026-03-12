@@ -9,6 +9,9 @@ bash/private
 nvim/lua/chadrc.lua
 ghostty/config
 
+# Backup files (created by slink during bootstrap)
+*.bak.*
+
 # Machine-specific symlinks (created by bootstrap)
 hypr/hyprland.conf
 hypr/machine.conf
