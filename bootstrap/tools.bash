@@ -38,17 +38,13 @@ slink() {
 
     mkdir -p "$(dirname "$link_name")"
 
-    # Already a correct symlink — nothing to do
+    # Already correct: symlink pointing to the right place, or hardlink (same inode)
     if [[ -L "$link_name" && "$(readlink -f "$link_name")" == "$(readlink -f "$target")" ]]; then
         _slink_count=$((_slink_count + 1))
         return 0
     fi
-
-    # Same file (hardlink) — replace with symlink, no backup needed
-    if [[ -f "$link_name" && ! -L "$link_name" && -f "$target" ]]; then
+    if [[ -f "$link_name" && ! -L "$link_name" && -f "$target" && ! -L "$target" ]]; then
         if [[ "$(stat -c %i "$link_name")" == "$(stat -c %i "$target")" ]]; then
-            rm "$link_name"
-            ln -sfn "$target" "$link_name"
             _slink_count=$((_slink_count + 1))
             return 0
         fi
