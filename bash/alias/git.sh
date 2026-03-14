@@ -108,3 +108,17 @@ gcl() { gh repo clone "$(ghf)"; }
 
 # View repo in browser via fzf search
 grw() { gh repo view --web "$(ghf)"; }
+
+gwi() {
+  if [[ ! -f .gitignore ]]; then
+    touch .gitignore
+  fi
+
+  if ! grep -q "^\.worktrees$" .gitignore; then
+    echo ".worktrees" >> .gitignore
+  fi
+
+  mkdir -p .worktrees
+
+  echo ".worktrees initialized"
+}
