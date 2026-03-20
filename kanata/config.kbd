@@ -1,0 +1,19 @@
+;; Caps to escape/control configuration for Kanata
+;; ----------------------------------------------
+
+(defcfg
+  ;; Let every key we don’t mention pass through untouched,
+  ;; so we don’t have to list the whole keyboard in `defsrc`.
+  process-unmapped-keys yes)
+
+(defsrc
+  caps
+)
+
+(defalias
+  escctrl (tap-hold 100 100 esc lctl)
+)
+
+(deflayer base
+  @escctrl
+)

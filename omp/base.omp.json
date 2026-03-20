@@ -1,0 +1,140 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "palette": {
+    "host_color": "SESSION_COLOR_PLACEHOLDER",
+    "brightblack": "#888888",
+    "default": "transparent",
+    "red": "#ff3030"
+  },
+  "blocks": [
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "type": "text",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:brightblack",
+          "template": "\u250c"
+        },
+        {
+          "type": "os",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:host_color",
+          "properties": {
+            "windows": "\ue62a",
+            "linux": "\uf17c",
+            "ubuntu": "\uf31b",
+            "macos": "\uf179"
+          },
+          "template": " {{.Icon}}{{if .WSL}} (WSL){{end}}\u2800"
+        },
+        {
+          "type": "shell",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:brightblack",
+          "template": " \uf489 {{.Name}}\u2800"
+        },
+        {
+          "type": "session",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:host_color",
+          "template": " {{.UserName}}@{{.HostName}} "
+        },
+        {
+          "type": "git",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:brightblack",
+          "properties": {
+            "branch_icon": " \ue0a0 "
+          },
+          "template": " {{.HEAD}} "
+        },
+        {
+          "type": "python",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:brightblack",
+          "properties": {
+            "display_mode": "environment",
+            "fetch_version": false
+          },
+          "template": " \ue606 {{ .Venv }}\u2800"
+        }
+      ]
+    },
+    {
+      "type": "prompt",
+      "alignment": "right",
+      "segments": [
+        {
+          "type": "executiontime",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "transparent",
+          "properties": {
+            "style": "austin",
+            "threshold": 0
+          },
+          "template": "{{.FormattedMs}}"
+        },
+        {
+          "type": "time",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "transparent",
+          "properties": {
+            "time_format": "02/01/06 15:04"
+          },
+          "template": "<p:white> \u00b7 </>{{.CurrentDate | date .Format}}"
+        }
+      ]
+    },
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "type": "path",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:host_color",
+          "properties": {
+            "style": "full"
+          },
+          "template": " \u2514 {{.Path}} "
+        }
+      ]
+    },
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "type": "status",
+          "style": "plain",
+          "background": "transparent",
+          "foreground": "p:host_color",
+          "foreground_templates": [
+            "{{if gt .Code 0}}p:red{{end}}"
+          ],
+          "properties": {
+            "always_enabled": true
+          },
+          "template": "\u276f"
+        }
+      ]
+    }
+  ],
+  "console_title_template": "{{if .Root}}[root] {{end}}{{.Shell}} in <{{.Folder}}>",
+  "final_space": true,
+  "version": 3
+}

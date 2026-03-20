@@ -1,0 +1,10 @@
+{
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
+  },
+  "enabledMcpjsonServers": [
+    "signal"
+  ],
+  "enableAllProjectMcpServers": true
+}

@@ -1,17 +1,8 @@
 #!/bin/bash
-COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), 'blue') if os.path.exists(f) else 'blue')")
+COLOR=$(python3 -c "import json,socket; print(json.load(open('/home/me/dotfiles/private/omp/colors.json')).get(socket.gethostname(), 'blue'))")
 
 tmux set -g status-bg default
 tmux set -g status-style "bg=default,fg=default"
-
-# Reset status-left/right
-tmux set -g status-left ""
-tmux set -g status-right ""
-
-# Set window formats
-tmux set -g window-status-current-format ""
-tmux set -g window-status-format ""
-tmux set -g window-status-separator ""
 
 tmux set -g pane-active-border-style "fg=$COLOR"
 tmux set -g message-style "bg=default,fg=$COLOR"
@@ -19,34 +10,26 @@ tmux set -g message-command-style "bg=default,fg=$COLOR"
 tmux set -g mode-style "bg=$COLOR,fg=black"
 tmux setw -g clock-mode-colour "$COLOR"
 
-# Left side with black background for Session Name
-LEFT_LINE="#[align=left]#[bg=black,fg=$COLOR] #S #[bg=default,fg=$COLOR]── "
+# Use status-left / status-right / window-status-format (tmux 3.4 compatible)
+# Unset status-format to let status-left/right take over
+tmux set -gu status-format
 
-# Smart Window Deduplication:
-# If window name == session name, omit the window name (just show ID).
-# If process name == window name, omit the process name.
-WIN_INACTIVE="#{?#{==:#W,#S},#[fg=brightblack]#I,#[fg=brightblack]#I:#W}"
+# Left: session name in black bg
+tmux set -g status-left "#[bg=black,fg=$COLOR] #S #[bg=default,fg=$COLOR]── "
+tmux set -g status-left-length 30
 
-# Construct the active window format conditionally:
-# Base is just #I if #W == #S, else #I:#W
-BASE_ACTIVE="#{?#{==:#W,#S},#[fg=brightblue,bold]#I,#[fg=brightblue,bold]#I:#W}"
-# Suffix is empty if process == #W, else :process
-PROC_SUFFIX="#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}}"
+# Right: fill line + hostname
+tmux set -g status-right "#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+tmux set -g status-right-length 40
 
-WIN_ACTIVE="${BASE_ACTIVE}${PROC_SUFFIX}"
+tmux set -g status-justify left
 
-WINDOWS="#{W:$WIN_INACTIVE ,$WIN_ACTIVE }"
+# Inactive windows: dim
+tmux set -g window-status-format "#[fg=brightblack]#I:#W "
+tmux set -g window-status-separator ""
 
-# The dynamic gap fill
-FILL_LINE="#[align=centre]#[fg=$COLOR]#{R:─,#{client_width}}"
-
-# Right side
-RIGHT_EDGE="#[align=right]#[fg=$COLOR]── "
-HOSTNAME_BLOCK="#[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR]"
-RIGHT_TAIL=" ──"
-
-# Combine status format
-tmux set -g status-format[0] "${LEFT_LINE}${WINDOWS}${FILL_LINE}${RIGHT_EDGE}${HOSTNAME_BLOCK}${RIGHT_TAIL}"
+# Active window: bright blue bold, with process suffix if different
+tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
 
 # Top pane border with black background
 if tmux show-options -g | grep -q "pane-border-status top"; then
