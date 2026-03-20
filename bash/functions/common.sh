@@ -157,6 +157,14 @@ fully_detach_run() {
   setsid nohup "$@" </dev/null &>/dev/null &
 }
 
+find_and_set_omp_conf() {
+  local cfg
+  cfg=$(fd -H --type f --extension omp.json --base-directory "$HOME" 2>/dev/null | fzf) || return
+
+  # reload Oh My Posh with the chosen config
+  eval $(oh-my-posh init bash --config "$cfg")
+}
+
 
 # fuzzy‑checkout: list all git branches via fzf and checkout the selection
 git_checkout_fzf() {
@@ -355,6 +363,6 @@ dl_gitignore() {
 
 binadd() {
   local binary="$(realpath $1)"
-  ln -s "$binary" "$HOME/.local/bin/"
-  echo "Linked $1 to $HOME/.local/bin/"
+  ln -s "$binary" "/home/me/.local/bin/"
+  echo "Linked $1 to /home/me/.local/bin/"
 }

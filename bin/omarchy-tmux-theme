@@ -1,5 +1,5 @@
 #!/bin/bash
-COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), 'blue') if os.path.exists(f) else 'blue')")
+COLOR=$(python3 -c "import json,socket; print(json.load(open('/home/me/dotfiles/private/omp/colors.json')).get(socket.gethostname(), 'blue'))")
 
 tmux set -g status-bg default
 tmux set -g status-style "bg=default,fg=default"

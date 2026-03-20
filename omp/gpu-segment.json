@@ -1,0 +1,12 @@
+{
+  "_comment": "GPU segment for OMP - add to 'segments' array in right-aligned block, before executiontime",
+  "segment": {
+    "type": "text",
+    "style": "plain",
+    "background": "transparent",
+    "foreground": "p:gpu_icon",
+    "template": "{{ if .Env.POSH_GPU0_UTIL }}󰢮0 <p:gpu_util>{{.Env.POSH_GPU0_UTIL}}%</> <p:gpu_mem>󰍛 {{.Env.POSH_GPU0_MEM_GB}}</> {{if gt (atoi .Env.POSH_GPU0_TEMP) 79}}<p:gpu_temp_hot>{{else if gt (atoi .Env.POSH_GPU0_TEMP) 59}}<p:gpu_temp_warm>{{else}}<p:gpu_temp_cool>{{end}}󰔏 {{.Env.POSH_GPU0_TEMP}}°</>{{ end }}{{ if .Env.POSH_GPU1_UTIL }}<p:white> · </>󰢮1 <p:gpu_util>{{.Env.POSH_GPU1_UTIL}}%</> <p:gpu_mem>󰍛 {{.Env.POSH_GPU1_MEM_GB}}</> {{if gt (atoi .Env.POSH_GPU1_TEMP) 79}}<p:gpu_temp_hot>{{else if gt (atoi .Env.POSH_GPU1_TEMP) 59}}<p:gpu_temp_warm>{{else}}<p:gpu_temp_cool>{{end}}󰔏 {{.Env.POSH_GPU1_TEMP}}°</>{{ end }}"
+  },
+  "executiontime_template_with_gpu": "{{ if .Env.POSH_GPU0_UTIL }}<p:white> · </>{{ end }}{{.FormattedMs}}",
+  "executiontime_template_without_gpu": "{{.FormattedMs}}"
+}

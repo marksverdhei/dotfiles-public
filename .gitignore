@@ -1,24 +1,22 @@
 claude
+omp/colors.json
 notes.txt
 
 # Private dotfiles (cloned separately when authenticated)
 private/
-bash/private
 
 # Generated configs
 nvim/lua/chadrc.lua
 ghostty/config
-
-# Backup files (created by slink during bootstrap)
-*.bak.*
+omp/*.omp.json
+!omp/base.omp.json
 
 # Machine-specific symlinks (created by bootstrap)
 hypr/hyprland.conf
 hypr/machine.conf
 hypr/monitors.conf
-hypr/shaders/
 nvim/nvim
-waybar/
+waybar/base.css
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

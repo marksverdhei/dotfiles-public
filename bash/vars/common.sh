@@ -6,8 +6,7 @@ if [[ -z "$LANG" ]]; then
   export LANG="en_US.UTF-8"
 fi
 
-export COMMIT_MSG_MODEL='qwen3.5-9b'
-export HAT_MODEL='qwen3.5-9b'
+export COMMIT_MSG_MODEL='qwen3-coder:latest'
 
 export HF_HOME="$HOME/Models/huggingface"
 
@@ -16,4 +15,5 @@ export ANONYMIZED_TELEMETERY='false'
 export MODELS="$HOME/Models"
 export GGUFS="$HOME/Models/llama.cpp"
 
+# export CLAUDE_CONFIG_DIR="/home/me/dotfiles/claude/"
 unset CLAUDE_CONFIG_DIR

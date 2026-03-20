@@ -2,7 +2,7 @@
 # Priority: private per-host > private base > public default
 starship_dir="$DOTFILES_PRIVATE/starship"
 starship_config="$starship_dir/${HOSTNAME}.starship.toml"
-# For container hostnames like "host-dev-gpu-1", try the base name "host"
+# For container hostnames like "snail-dev-gpu-1", try the base name "snail"
 if [[ ! -f "$starship_config" && "$HOSTNAME" == *-* ]]; then
   _base_host="${HOSTNAME%%-*}"
   [[ -f "$starship_dir/${_base_host}.starship.toml" ]] && starship_config="$starship_dir/${_base_host}.starship.toml"

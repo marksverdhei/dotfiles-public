@@ -38,22 +38,10 @@ slink() {
 
     mkdir -p "$(dirname "$link_name")"
 
-    # Already correct: symlink pointing to the right place, or hardlink (same inode)
-    if [[ -L "$link_name" && "$(readlink -f "$link_name")" == "$(readlink -f "$target")" ]]; then
-        _slink_count=$((_slink_count + 1))
-        return 0
-    fi
-    if [[ -f "$link_name" && ! -L "$link_name" && -f "$target" && ! -L "$target" ]]; then
-        if [[ "$(stat -c %i "$link_name")" == "$(stat -c %i "$target")" ]]; then
-            _slink_count=$((_slink_count + 1))
-            return 0
-        fi
-    fi
-
-    # Back up existing regular files/dirs (not symlinks) before overwriting
+    # Back up existing regular files (not symlinks) before overwriting
     if [[ -e "$link_name" && ! -L "$link_name" ]]; then
         local backup="${link_name}.bak.$(date +%s)"
-        mv "$link_name" "$backup"
+        cp -a "$link_name" "$backup"
         warn "slink: backed up $link_name → $backup"
     fi
 
