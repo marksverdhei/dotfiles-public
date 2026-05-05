@@ -1,0 +1,40 @@
+#!/bin/bash
+# Shim over omarchy-theme-bg-next that adds video wallpaper support.
+# swaybg is image-only; for videos, launch mpvpaper instead.
+
+REAL="$HOME/.local/share/omarchy/bin/omarchy-theme-bg-next"
+BG_LINK="$HOME/.config/omarchy/current/background"
+
+kill_and_wait() {
+  local name=$1
+  pgrep -x "$name" >/dev/null || return 0
+  pkill -KILL -x "$name" 2>/dev/null
+  for _ in $(seq 1 40); do
+    pgrep -x "$name" >/dev/null || return 0
+    sleep 0.05
+  done
+}
+
+# Kill any swaybg that shows up within `timeout` deciseconds. The real bg
+# scripts launch swaybg via `setsid uwsm-app -- swaybg &`, which returns
+# before swaybg is actually visible to pgrep — a plain pkill races and
+# misses it, leaving swaybg stacked on top of mpvpaper.
+suppress_swaybg() {
+  local timeout=${1:-30}
+  for _ in $(seq 1 "$timeout"); do
+    pkill -KILL -x swaybg 2>/dev/null
+    sleep 0.1
+  done
+}
+
+"$REAL" "$@"
+
+BG=$(readlink -f "$BG_LINK" 2>/dev/null)
+
+if [[ $BG =~ \.(mp4|webm|mkv|mov|avi)$ ]]; then
+  kill_and_wait mpvpaper
+  setsid uwsm-app -- mpvpaper -f -o "no-audio loop-playlist=inf hwdec=auto" '*' "$BG" >/dev/null 2>&1 &
+  suppress_swaybg 30
+else
+  kill_and_wait mpvpaper
+fi

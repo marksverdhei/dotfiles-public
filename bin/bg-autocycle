@@ -1,0 +1,54 @@
+#!/bin/bash
+# Auto-cycle the omarchy background every INTERVAL seconds.
+#
+# Usage:
+#   bg-autocycle start [INTERVAL_SECONDS]  (default 30)
+#   bg-autocycle stop
+#   bg-autocycle status
+
+PIDFILE=/tmp/bg-autocycle.pid
+LOGFILE=/tmp/bg-autocycle.log
+
+case "${1:-status}" in
+  start)
+    INTERVAL=${2:-30}
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "already running (pid $(cat "$PIDFILE"))"
+      exit 1
+    fi
+    (
+      trap 'rm -f "$PIDFILE"; exit 0' TERM INT
+      echo "[$(date +%T)] started, interval=${INTERVAL}s" >> "$LOGFILE"
+      while :; do
+        sleep "$INTERVAL"
+        omarchy-theme-bg-next >/dev/null 2>&1
+        cur=$(readlink "$HOME/.config/omarchy/current/background" 2>/dev/null | xargs -r basename)
+        echo "[$(date +%T)] cycled -> $cur" >> "$LOGFILE"
+      done
+    ) &
+    echo $! > "$PIDFILE"
+    disown
+    echo "started pid $(cat "$PIDFILE"), interval=${INTERVAL}s"
+    ;;
+  stop)
+    if [ -f "$PIDFILE" ]; then
+      pid=$(cat "$PIDFILE")
+      kill "$pid" 2>/dev/null && echo "stopped pid $pid" || echo "pid $pid not alive"
+      rm -f "$PIDFILE"
+    else
+      echo "not running"
+    fi
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "running pid $(cat "$PIDFILE")"
+      tail -5 "$LOGFILE" 2>/dev/null
+    else
+      echo "not running"
+    fi
+    ;;
+  *)
+    echo "Usage: bg-autocycle {start [INTERVAL]|stop|status}" >&2
+    exit 2
+    ;;
+esac

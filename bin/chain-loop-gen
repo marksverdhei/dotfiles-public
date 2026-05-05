@@ -1,0 +1,170 @@
+#!/usr/bin/env -S python3 -u
+"""Chain multiple FLF segments into one long seamless loop via ComfyUI API.
+
+Usage:
+  chain-loop-gen --name NAME --prompt "text" KEYFRAME1 KEYFRAME2 ... [--loop]
+
+  Without --loop, pairs are (k1,k2), (k2,k3), ... — video starts at k1, ends at kN.
+  With --loop, pairs are (k1,k2), ..., (k_{N-1},kN), (kN,k1) — closes back to k1.
+
+Emits: /tmp/bg-loops/chain-NAME.mp4
+"""
+import argparse, json, os, random, subprocess, sys, time, uuid, urllib.parse
+from pathlib import Path
+import urllib.request
+import urllib.error
+
+API = os.environ.get("COMFYUI_URL", "http://192.168.8.170:30188")
+TEMPLATE = Path("/tmp/bg-loops/flf-api-template.json")
+WORKDIR = Path("/tmp/bg-loops")
+WIDTH = 1280
+HEIGHT = 720
+
+
+def http_json(method, path, payload=None):
+    url = API + path
+    data = json.dumps(payload).encode() if payload else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={"Content-Type": "application/json"} if data else {})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def upload_image(path: Path) -> str:
+    """Upload an image to ComfyUI input folder, return server-side filename."""
+    boundary = "----chain" + uuid.uuid4().hex
+    body = []
+    body.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n".encode())
+    body.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".encode())
+    body.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{path.name}\"\r\nContent-Type: image/png\r\n\r\n".encode())
+    body.append(path.read_bytes())
+    body.append(f"\r\n--{boundary}--\r\n".encode())
+    req = urllib.request.Request(
+        API + "/api/upload/image",
+        data=b"".join(body),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())["name"]
+
+
+def build_prompt(template, start_img, end_img, prompt_text, prefix):
+    p = json.loads(json.dumps(template))
+    p["126"]["inputs"]["image"] = start_img
+    p["130"]["inputs"]["image"] = end_img
+    p["142:6"]["inputs"]["text"] = prompt_text
+    for rid in ("142:98", "142:99"):
+        p[rid]["inputs"]["width"] = WIDTH
+        p[rid]["inputs"]["height"] = HEIGHT
+    p["142:57"]["inputs"]["noise_seed"] = random.randint(0, 2**63 - 1)
+    p["142:58"]["inputs"]["noise_seed"] = random.randint(0, 2**63 - 1)
+    p["146"]["inputs"]["filename_prefix"] = prefix
+    return p
+
+
+def queue(prompt):
+    resp = http_json("POST", "/api/prompt",
+                     {"client_id": f"chain-{uuid.uuid4().hex[:8]}", "prompt": prompt})
+    if resp.get("node_errors"):
+        print("node_errors:", json.dumps(resp["node_errors"], indent=2), file=sys.stderr)
+        sys.exit(2)
+    return resp["prompt_id"]
+
+
+def wait_for(pid, timeout=7200):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            hist = http_json("GET", f"/api/history/{pid}")
+        except urllib.error.URLError:
+            time.sleep(10); continue
+        entry = hist.get(pid)
+        if entry and entry.get("status", {}).get("completed"):
+            return entry
+        # show queue position
+        try:
+            q = http_json("GET", "/api/queue")
+            running = [x[1] for x in q.get("queue_running", [])]
+            pending = [x[1] for x in q.get("queue_pending", [])]
+            pos = "running" if pid in running else (
+                f"pending {pending.index(pid)+1}/{len(pending)}" if pid in pending else "unknown")
+            print(f"  [{int(time.time()-t0)}s] {pid[:8]} {pos}")
+        except Exception:
+            pass
+        time.sleep(15)
+    raise TimeoutError(f"prompt {pid} didn't finish in {timeout}s")
+
+
+def download_video(entry, dst: Path):
+    for node, out in entry["outputs"].items():
+        for v in out.get("videos", []) + out.get("gifs", []) + out.get("images", []):
+            if v["filename"].lower().endswith((".mp4", ".webm", ".mkv")):
+                q = urllib.parse.urlencode({
+                    "filename": v["filename"],
+                    "subfolder": v.get("subfolder", ""),
+                    "type": v.get("type", "output"),
+                })
+                with urllib.request.urlopen(f"{API}/api/view?{q}", timeout=180) as r:
+                    dst.write_bytes(r.read())
+                return
+    raise RuntimeError("no video in outputs: " + json.dumps(entry["outputs"]))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--prompt", required=True, help="FLF text prompt applied to every segment")
+    ap.add_argument("--loop", action="store_true", help="close the loop (append first keyframe at end)")
+    ap.add_argument("keyframes", nargs="+", type=Path)
+    ap.add_argument("--fps", type=int, default=16)
+    args = ap.parse_args()
+
+    if len(args.keyframes) < 2:
+        sys.exit("need at least 2 keyframes")
+    for kf in args.keyframes:
+        if not kf.exists():
+            sys.exit(f"missing keyframe: {kf}")
+
+    frames = list(args.keyframes)
+    if args.loop:
+        frames.append(frames[0])
+
+    WORKDIR.mkdir(exist_ok=True)
+    template = json.loads(TEMPLATE.read_text())
+
+    print(f"[upload] {len(set(frames))} unique keyframes")
+    server_names = {}
+    for kf in set(frames):
+        name = upload_image(kf)
+        server_names[kf] = name
+        print(f"  {kf.name} -> {name}")
+
+    segments = []
+    for i in range(len(frames) - 1):
+        a, b = frames[i], frames[i + 1]
+        seg_prefix = f"chain/{args.name}_seg{i:02d}"
+        print(f"[seg {i}] {a.name} -> {b.name}")
+        prompt = build_prompt(template, server_names[a], server_names[b],
+                              args.prompt, seg_prefix)
+        pid = queue(prompt)
+        print(f"  queued {pid}")
+        entry = wait_for(pid)
+        dst = WORKDIR / f"chain-{args.name}-seg{i:02d}.mp4"
+        download_video(entry, dst)
+        print(f"  -> {dst} ({dst.stat().st_size} bytes)")
+        segments.append(dst)
+
+    # concat with ffmpeg
+    list_file = WORKDIR / f"chain-{args.name}.txt"
+    list_file.write_text("".join(f"file '{s}'\n" for s in segments))
+    final = WORKDIR / f"chain-{args.name}.mp4"
+    print(f"[concat] -> {final}")
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+        "-i", str(list_file), "-c", "copy", str(final),
+    ], check=True)
+    print(f"DONE: {final}  ({final.stat().st_size} bytes, {len(segments)} segments)")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,173 @@
+#!/usr/bin/env -S python3 -u
+"""Batch-queue Qwen Image Edit 2511 variations of a source image via ComfyUI API.
+
+Usage:
+  qwen-edit-batch --image PATH --batch-name NAME [--steps 4|40] [--extra-image PATH2] [--prompts FILE]
+    where --prompts FILE is a plain-text file, one prompt per line
+    or read prompts from stdin, or use --prompt PROMPT for a single one-shot.
+
+Outputs: filename_prefix = "qwen_batch/<NAME>_<slug>". Writes prompt ids to
+  /tmp/bg-loops/qwen-prompt-ids.txt for the poller to pick up.
+"""
+import argparse, json, os, random, re, sys, time, uuid
+from pathlib import Path
+import urllib.request, urllib.parse
+
+API = os.environ.get("COMFYUI_URL", "http://192.168.8.170:30188")
+IDS_FILE = Path("/tmp/bg-loops/qwen-prompt-ids.txt")
+
+
+def upload_image(path: Path) -> str:
+    boundary = "----qwen" + uuid.uuid4().hex
+    parts = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n".encode(),
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".encode(),
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{path.name}\"\r\nContent-Type: image/png\r\n\r\n".encode(),
+        path.read_bytes(),
+        f"\r\n--{boundary}--\r\n".encode(),
+    ]
+    req = urllib.request.Request(
+        API + "/api/upload/image", data=b"".join(parts),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())["name"]
+
+
+def build_prompt(img_name, prompt_text, prefix, steps, extra_img=None):
+    # Choose config based on steps
+    if steps == 4:
+        lora = "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
+        cfg = 1.0
+    else:
+        lora = None
+        cfg = 4.0
+
+    seed = random.randint(0, 2**63 - 1)
+
+    p = {
+        "load": {"class_type": "LoadImage", "inputs": {"image": img_name}},
+        "clip": {"class_type": "CLIPLoader", "inputs": {
+            "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+            "type": "qwen_image", "device": "default"}},
+        "unet": {"class_type": "UNETLoader", "inputs": {
+            "unet_name": "qwen_image_edit_2511_fp8mixed.safetensors",
+            "weight_dtype": "default"}},
+        "vae": {"class_type": "VAELoader", "inputs": {
+            "vae_name": "qwen_image_vae.safetensors"}},
+        "scale": {"class_type": "FluxKontextImageScale",
+                  "inputs": {"image": ["load", 0]}},
+    }
+
+    model_src = ["unet", 0]
+    if lora:
+        p["lora"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "model": model_src, "lora_name": lora, "strength_model": 1.0}}
+        model_src = ["lora", 0]
+
+    p["sampling"] = {"class_type": "ModelSamplingAuraFlow",
+                     "inputs": {"model": model_src, "shift": 3.1}}
+    p["cfgnorm"] = {"class_type": "CFGNorm",
+                    "inputs": {"model": ["sampling", 0], "strength": 1.0}}
+
+    pos_inputs = {"clip": ["clip", 0], "vae": ["vae", 0],
+                  "image1": ["scale", 0], "prompt": prompt_text}
+    neg_inputs = {"clip": ["clip", 0], "vae": ["vae", 0],
+                  "image1": ["scale", 0], "prompt": ""}
+    if extra_img:
+        pos_inputs["image2"] = ["load_extra", 0]
+        neg_inputs["image2"] = ["load_extra", 0]
+        p["load_extra"] = {"class_type": "LoadImage",
+                           "inputs": {"image": extra_img}}
+
+    p["pos_text"] = {"class_type": "TextEncodeQwenImageEditPlus",
+                     "inputs": pos_inputs}
+    p["neg_text"] = {"class_type": "TextEncodeQwenImageEditPlus",
+                     "inputs": neg_inputs}
+    p["pos_flux"] = {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                     "inputs": {"conditioning": ["pos_text", 0],
+                                "reference_latents_method": "index_timestep_zero"}}
+    p["neg_flux"] = {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                     "inputs": {"conditioning": ["neg_text", 0],
+                                "reference_latents_method": "index_timestep_zero"}}
+    p["vae_encode"] = {"class_type": "VAEEncode",
+                       "inputs": {"pixels": ["scale", 0], "vae": ["vae", 0]}}
+    p["ksampler"] = {"class_type": "KSampler", "inputs": {
+        "model": ["cfgnorm", 0],
+        "positive": ["pos_flux", 0],
+        "negative": ["neg_flux", 0],
+        "latent_image": ["vae_encode", 0],
+        "seed": seed, "steps": steps, "cfg": cfg,
+        "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0}}
+    p["vae_decode"] = {"class_type": "VAEDecode",
+                       "inputs": {"samples": ["ksampler", 0], "vae": ["vae", 0]}}
+    p["save"] = {"class_type": "SaveImage", "inputs": {
+        "images": ["vae_decode", 0], "filename_prefix": prefix}}
+
+    return p
+
+
+def queue(p, cid):
+    data = json.dumps({"client_id": cid, "prompt": p}).encode()
+    req = urllib.request.Request(API + "/api/prompt", data=data,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        resp = json.loads(r.read())
+    if resp.get("node_errors"):
+        print("NODE ERRORS:", json.dumps(resp["node_errors"], indent=2), file=sys.stderr)
+        return None
+    return resp["prompt_id"]
+
+
+def slugify(s, maxlen=40):
+    s = re.sub(r"[^\w\-]+", "_", s.lower().strip())[:maxlen].strip("_")
+    return s or "unnamed"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--image", required=True, type=Path)
+    ap.add_argument("--batch-name", required=True)
+    ap.add_argument("--steps", type=int, default=4, choices=[4, 40])
+    ap.add_argument("--extra-image", type=Path)
+    ap.add_argument("--prompt", help="single prompt (skip --prompts)")
+    ap.add_argument("--prompts", type=Path, help="file with one prompt per line")
+    args = ap.parse_args()
+
+    if not args.image.exists():
+        sys.exit(f"missing: {args.image}")
+
+    if args.prompt:
+        prompts = [args.prompt]
+    elif args.prompts:
+        prompts = [l.strip() for l in args.prompts.read_text().splitlines() if l.strip() and not l.startswith("#")]
+    else:
+        prompts = [l.strip() for l in sys.stdin if l.strip() and not l.startswith("#")]
+
+    if not prompts:
+        sys.exit("no prompts")
+
+    print(f"[upload] {args.image}")
+    img_name = upload_image(args.image)
+    extra_name = None
+    if args.extra_image:
+        print(f"[upload] {args.extra_image}")
+        extra_name = upload_image(args.extra_image)
+
+    IDS_FILE.parent.mkdir(exist_ok=True)
+
+    for i, pt in enumerate(prompts):
+        slug = slugify(pt)
+        prefix = f"qwen_batch/{args.batch_name}_{i:02d}_{slug}"
+        p = build_prompt(img_name, pt, prefix, args.steps, extra_name)
+        pid = queue(p, f"qwen-{args.batch_name}-{i}")
+        if pid:
+            tag = f"{args.batch_name}_{i:02d}_{slug}"
+            with IDS_FILE.open("a") as f:
+                f.write(f"{pid} {tag}\n")
+            print(f"  [{i:02d}] queued {pid[:8]}  {slug}")
+        else:
+            print(f"  [{i:02d}] FAILED   {slug}")
+
+
+if __name__ == "__main__":
+    main()
