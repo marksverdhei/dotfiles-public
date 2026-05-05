@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Toggle Discord (vesktop or Brave PWA) mute by briefly focusing it,
+# sending Ctrl+Shift+M, and restoring focus. Workaround for Chromium-based
+# apps that ignore synthetic key events without focus.
+set -euo pipefail
+
+prev=$(hyprctl activewindow -j | jq -r '.address // empty')
+target=$(hyprctl clients -j | jq -r '
+  .[] | select(.class | test("^(vesktop|brave-discord\\.com.*)$")) | .address' | head -n1)
+
+if [[ -z "$target" ]]; then
+  exit 0
+fi
+
+hyprctl dispatch focuswindow "address:$target" >/dev/null
+# Small settle delay so Chromium acknowledges focus before key arrives
+sleep 0.05
+wtype -M ctrl -M shift -k m -m shift -m ctrl
+
+if [[ -n "$prev" && "$prev" != "$target" ]]; then
+  hyprctl dispatch focuswindow "address:$prev" >/dev/null
+fi

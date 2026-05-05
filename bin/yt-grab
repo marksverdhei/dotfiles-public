@@ -1,0 +1,50 @@
+#!/bin/bash
+# yt-grab: Hotkey script to grab YouTube URL from focused browser and download with yt-dlp
+# Usage: bind to a Hyprland hotkey
+
+DOWNLOAD_DIR="$HOME/Downloads/yt"
+mkdir -p "$DOWNLOAD_DIR"
+
+# Save current clipboard
+old_clip="$(wl-paste 2>/dev/null)"
+
+# Grab URL from browser address bar: Ctrl+L (focus), Ctrl+C (copy), Escape (deselect)
+wtype -M ctrl l -m ctrl
+sleep 0.15
+wtype -M ctrl c -m ctrl
+sleep 0.15
+wtype -k Escape
+
+# Give clipboard a moment
+sleep 0.1
+url="$(wl-paste 2>/dev/null)"
+
+# Restore old clipboard
+if [ -n "$old_clip" ]; then
+    printf '%s' "$old_clip" | wl-copy
+fi
+
+# Validate it's a YouTube URL
+if ! echo "$url" | grep -qE '(youtube\.com/watch|youtu\.be/|youtube\.com/shorts/)'; then
+    notify-send -u normal "yt-grab" "Not a YouTube URL:\n${url:0:80}"
+    exit 1
+fi
+
+# Notify start
+video_id=$(echo "$url" | grep -oP '(?:v=|youtu\.be/|shorts/)[\w-]+' | head -1)
+notify-send -u low "yt-grab" "Downloading: $video_id"
+
+# Download in background in a terminal
+alacritty --title "yt-dlp: $video_id" -e bash -c "
+    cd '$DOWNLOAD_DIR'
+    yt-dlp --no-mtime -o '%(title)s [%(id)s].%(ext)s' '$url'
+    status=\$?
+    if [ \$status -eq 0 ]; then
+        notify-send -u normal 'yt-grab' 'Download complete: $video_id'
+    else
+        notify-send -u critical 'yt-grab' 'Download failed: $video_id'
+    fi
+    echo; echo 'Press Enter to close...'; read
+" &
+
+exit 0
