@@ -1,4 +1,9 @@
 #!/bin/bash
+# Variant of omarchy-tmux-theme that shows pane IDs (%N) in status bar and borders.
+# Usage: run this instead of omarchy-tmux-theme when you need pane IDs visible.
+#   ~/dotfiles/bin/omarchy-tmux-theme-paneids
+# To revert: re-run ~/dotfiles/bin/omarchy-tmux-theme
+
 COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), 'blue') if os.path.exists(f) else 'blue')")
 
 tmux set -g status-bg default
@@ -10,34 +15,26 @@ tmux set -g message-command-style "bg=default,fg=$COLOR"
 tmux set -g mode-style "bg=$COLOR,fg=black"
 tmux setw -g clock-mode-colour "$COLOR"
 
-# Use status-left / status-right / window-status-format (tmux 3.4 compatible)
-# Unset status-format to let status-left/right take over
 tmux set -gu status-format
 
-# Left: session name + active pane ID in black bg
+# Left: session name + active pane ID
 tmux set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
 tmux set -g status-left-length 40
 
-# Right: fill line + hostname
-# Prepend tmux-continuum's save hook so periodic saves still fire after we
-# overwrite status-right (status refresh is what triggers continuum_save.sh).
-CONTINUUM_HOOK=""
-if [ -x "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh" ]; then
-  CONTINUUM_HOOK="#($HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
-fi
-tmux set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+# Right: hostname
+tmux set -g status-right "#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
 tmux set -g status-right-length 40
 
 tmux set -g status-justify left
 
-# Inactive windows: dim
+# Inactive windows: dim, with pane ID
 tmux set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
 tmux set -g window-status-separator ""
 
-# Active window: bright blue bold, with process suffix if different
+# Active window: bright blue bold, with pane ID and process suffix
 tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
 
-# Top pane border with black background
+# Pane borders with pane ID
 if tmux show-options -g | grep -q "pane-border-status top"; then
   tmux set -g pane-border-format "#[bg=black] #{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id} #P: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}} #[bg=default,fg=default]"
 fi

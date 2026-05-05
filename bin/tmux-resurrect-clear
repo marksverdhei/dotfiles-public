@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Wipe all tmux-resurrect snapshots and force a fresh save of the live state.
+# Use this after intentionally closing sessions you do NOT want resurrected.
+
+set -euo pipefail
+
+DIR="${HOME}/.local/share/tmux/resurrect"
+
+if [[ ! -d "$DIR" ]]; then
+  echo "no resurrect dir at $DIR" >&2
+  exit 0
+fi
+
+count=$(find "$DIR" -maxdepth 1 -name 'tmux_resurrect_*.txt' | wc -l)
+echo "removing $count snapshot(s) and pane_contents.tar.gz from $DIR"
+
+find "$DIR" -maxdepth 1 -name 'tmux_resurrect_*.txt' -delete
+rm -f "$DIR/last" "$DIR/pane_contents.tar.gz"
+
+# Snapshot the current (post-cleanup) tmux state so continuum-restore on
+# next launch reflects exactly what's alive right now.
+SAVE="${HOME}/.tmux/plugins/tmux-resurrect/scripts/save.sh"
+if [[ -x "$SAVE" ]] && tmux info >/dev/null 2>&1; then
+  echo "saving fresh snapshot of current tmux state"
+  "$SAVE" quiet
+else
+  echo "skipping save (tmux not running or resurrect plugin missing)"
+fi
