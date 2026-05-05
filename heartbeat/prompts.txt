@@ -1,0 +1,4 @@
+[heartbeat time:{{time}}] {{elapsed}} has passed since heartbeat started [/heartbeat]
+[heartbeat time:{{time}}] Re-check progress, summarize, and continue. {{elapsed}} elapsed.
+[heartbeat time:{{time}}] Are you blocked? If so, take initiative. Otherwise keep working.
+[heartbeat time:{{time}}] {{elapsed}} elapsed — pause and write a 3-bullet status summary, then resume.

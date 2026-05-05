@@ -17,3 +17,4 @@ fi
 # ── Other symlinks ────────────────────────────
 slink "$DOTFILES/ghostty" "$HOME/.config/ghostty"
 slink "$DOTFILES/vim/.vimrc" "$HOME/.vimrc"
+slink "$DOTFILES/heartbeat" "$HOME/.config/heartbeat"
