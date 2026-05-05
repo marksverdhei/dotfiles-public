@@ -19,6 +19,7 @@ add_to_path "$HOME/.cargo/bin"
 add_to_path "$HOME/go/bin"
 add_to_path "$DOTFILES/bin"
 add_to_path "$DOTFILES_PRIVATE/bin"
+add_to_path "$HOME/ht/agent-tools/bin"
 
 if cmd_exists nvidia-smi; then
   export CUDA_VERSION=$(nvidia-smi --version | tail -n 1 | grep -o -E "[0-9]+\.[0-9]+")
