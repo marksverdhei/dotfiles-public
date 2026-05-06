@@ -12,6 +12,11 @@ ghostty/config
 # Backup files (created by slink during bootstrap)
 *.bak.*
 
+# Generated per-host OMP configs (rendered from base.omp.json + colors.json)
+omp/*.omp.json
+!omp/base.omp.json
+omp/colors.json
+
 # Machine-specific symlinks (created by bootstrap)
 hypr/hyprland.conf
 hypr/machine.conf
