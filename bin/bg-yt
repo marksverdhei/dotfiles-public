@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# bg-yt — fetch a YouTube video and register it as a background-video launcher.
+#
+# Mirrors the existing bg-soul-* / bg-banger-* .desktop pattern: downloads the
+# video to ~/Videos/<Category>/, grabs a thumbnail to ~/.local/share/icons/
+# bg-videos/, and writes ~/.local/share/applications/bg-<category>-<slug>.desktop
+# whose Exec calls `subsctl bg <path>`.
+#
+# Usage:
+#   bg-yt <url> [-n NAME] [-c CATEGORY] [--set] [--force]
+#
+# Flags:
+#   -n NAME       Display name (default: YouTube title)
+#   -c CATEGORY   Group prefix in .desktop name (default: yt)
+#                 Examples: soul, banger, lofi, vibe
+#   --set         Apply as wallpaper immediately after registering
+#   --force       Re-download / overwrite even if files already exist
+
+set -euo pipefail
+
+URL=""
+NAME=""
+CATEGORY="yt"
+SET_NOW=0
+FORCE=0
+
+usage() {
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--name)     NAME="$2"; shift 2 ;;
+    -c|--category) CATEGORY="$2"; shift 2 ;;
+    --set)         SET_NOW=1; shift ;;
+    --force)       FORCE=1; shift ;;
+    -h|--help)     usage 0 ;;
+    -*)            echo "unknown flag: $1" >&2; usage 2 ;;
+    *)             URL="$1"; shift ;;
+  esac
+done
+
+[[ -z $URL ]] && { echo "error: <url> required" >&2; usage 2; }
+
+for cmd in yt-dlp ffmpeg subsctl; do
+  command -v "$cmd" >/dev/null || { echo "missing: $cmd" >&2; exit 1; }
+done
+
+VIDEOS_DIR="$HOME/Videos/Backgrounds"
+ICONS_DIR="$HOME/.local/share/icons/bg-videos"
+APPS_DIR="$HOME/.local/share/applications"
+mkdir -p "$VIDEOS_DIR" "$ICONS_DIR" "$APPS_DIR"
+
+VIDEO_ID=$(yt-dlp --get-id --no-warnings "$URL")
+if [[ -z $NAME ]]; then
+  NAME=$(yt-dlp --get-title --no-warnings "$URL")
+fi
+
+slugify() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+    | cut -c1-60 \
+    | sed -E 's/-+$//'
+}
+
+SLUG=$(slugify "$NAME")
+# Fall back to the YouTube video ID when the title is e.g. all decorative
+# Unicode (𝓹𝓾𝓯𝓯 𝓽𝓱𝓮 𝓶𝓪𝓰𝓲𝓬) and slugifies to nothing.
+if [[ -z $SLUG ]]; then
+  SLUG="${VIDEO_ID,,}"
+fi
+
+VIDEO_PATH="$VIDEOS_DIR/${SLUG}.webm"
+ICON_PATH="$ICONS_DIR/${SLUG}.png"
+DESKTOP_PATH="$APPS_DIR/bg-${CATEGORY}-${SLUG}.desktop"
+
+if [[ -f $VIDEO_PATH && $FORCE -eq 0 ]]; then
+  echo "video exists (skip download): $VIDEO_PATH"
+else
+  echo "downloading → $VIDEO_PATH"
+  yt-dlp -f 'bv*[ext=webm]+ba[ext=webm]/bv*+ba/best' \
+    --merge-output-format webm \
+    -o "$VIDEO_PATH" "$URL"
+fi
+
+if [[ -f $ICON_PATH && $FORCE -eq 0 ]]; then
+  echo "icon exists (skip frame grab): $ICON_PATH"
+else
+  echo "thumbnail → $ICON_PATH"
+  ffmpeg -y -ss 5 -i "$VIDEO_PATH" -vframes 1 -vf 'scale=400:-1' "$ICON_PATH" \
+    </dev/null >/dev/null 2>&1
+fi
+
+cat >"$DESKTOP_PATH" <<DESKTOP
+[Desktop Entry]
+Name=BG ${CATEGORY^}: ${NAME}
+Comment=Set ${NAME} as background video (subsctl bg)
+Exec=$HOME/.local/bin/subsctl bg "${VIDEO_PATH}"
+Icon=${ICON_PATH}
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;
+DESKTOP
+
+update-desktop-database "$APPS_DIR" 2>/dev/null || true
+
+echo "registered: $DESKTOP_PATH"
+
+if (( SET_NOW )); then
+  subsctl bg "$VIDEO_PATH"
+fi
