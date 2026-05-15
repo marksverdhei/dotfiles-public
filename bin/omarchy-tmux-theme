@@ -37,7 +37,11 @@ tmux set -g window-status-separator ""
 # Active window: bright blue bold, with process suffix if different
 tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
 
-# Top pane border with black background
-if tmux show-options -g | grep -q "pane-border-status top"; then
-  tmux set -g pane-border-format "#[bg=black] #{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id} #P: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}} #[bg=default,fg=default]"
+# Top pane border with black background.
+# The leading `#{?...}` segment injects a 🎤 STICK marker on the pane
+# whose id is in /tmp/talking-stick-holder. Refreshes every status-interval.
+# pane-border-status is a window option, so check -gw (the previous
+# server-scope check silently skipped this whole block).
+if [ "$(tmux show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
+  tmux set -g pane-border-format "#[bg=black] #{?#{==:#{pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null)},#[fg=yellow#,bold]🎤 STICK #[bg=black],}#{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}} #[bg=default,fg=default]"
 fi
