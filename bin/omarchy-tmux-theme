@@ -37,7 +37,27 @@ tmux set -g window-status-separator ""
 # Active window: bright blue bold, with process suffix if different
 tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
 
-# Top pane border with black background
-if tmux show-options -g | grep -q "pane-border-status top"; then
-  tmux set -g pane-border-format "#[bg=black] #{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id} #P: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}} #[bg=default,fg=default]"
+# Top pane border with black background.
+#
+# When the pane is the talking-stick holder (its id == contents of
+# /tmp/talking-stick-holder), the ENTIRE title line is rendered in yellow
+# bold — not just the 🎤 STICK prefix — so the holder is unmistakable
+# even when the title text is occluded. The left/right ─── characters
+# tmux draws around the title come from pane-active-border-style /
+# pane-border-style (host-theme colour); tmux has no per-pane border
+# style, so those stay theme-coloured by design.
+#
+# A ❤ prefix is added when the pane has a live heartbeat. The match
+# uses tmux's `#{m:pattern,string}` against ` %5 %7 …`-style output
+# from `heartbeat tmux-active-panes`; the surrounding spaces guarantee
+# word-boundary matches so `%5` doesn't bleed into `%50`.
+#
+# Refreshes every status-interval (~2s) so the bar follows on transfer.
+if [ "$(tmux show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
+  # We compare numeric ids (37 vs 37), not "%37" vs "%37" — tmux's format
+  # engine re-interprets a literal `%37` as a width directive and pads
+  # with spaces, so the comparison silently fails. Strip the leading `%`
+  # from pane_id via #{s/^%//:pane_id} and strip `%` (and newline) from
+  # the holder file output with `tr -d "%\n"`.
+  tmux set -g pane-border-format "#[bg=black] #{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},#[fg=red#,bold]❤ #[bg=black],}#{?#{==:#{s/^%//:pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null | tr -d '%\\n')},#[fg=yellow#,bold]🎤 STICK ─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}},#{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}}} #[bg=default,fg=default]"
 fi
