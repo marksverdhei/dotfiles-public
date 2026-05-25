@@ -2,3 +2,5 @@
 [heartbeat time:{{time}}] Re-check progress, summarize, and continue. {{elapsed}} elapsed.
 [heartbeat time:{{time}}] Are you blocked? If so, take initiative. Otherwise keep working.
 [heartbeat time:{{time}}] {{elapsed}} elapsed — pause and write a 3-bullet status summary, then resume.
+[heartbeat time:{{time}}]Autoresearch heartbeat. You are the orchestrator and / or maintainer of the repo. Continue or find the next stage in the program ({{elapsed}} has passed) [/heartbeat]
+[heartbeat time:{{time}] {{elapsed}} has passed. Ensure our agents are working on their responsibilities. As our COO, keep this digital company running! We count on you, HAI[/heartbeat]}
