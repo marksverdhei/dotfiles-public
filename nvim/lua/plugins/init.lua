@@ -25,10 +25,15 @@ return {
           })
       end
   },
-  -- Pin treesitter to last version compatible with NvChad v2.5 (configs module removed after this)
+  -- Track the legacy `master` branch: it still ships the `configs` module
+  -- (so NvChad v2.5 keeps working) but, unlike the old 2023 commit, it carries
+  -- the treesitter-API compat fixes for Neovim 0.12. The old pin threw
+  -- "decoration provider conceal_line: attempt to call method 'range' (nil)"
+  -- on every redraw after the 0.11→0.12 upgrade. Run :TSUpdate after bumping.
   {
     "nvim-treesitter/nvim-treesitter",
-    commit = "310f0925ec64c7e54f3ee952679d285b13e5a735",
+    branch = "master",
+    build = ":TSUpdate",
   },
 
   {
@@ -88,7 +93,6 @@ return {
       "stevearc/dressing.nvim", -- for input provider dressing
       "folke/snacks.nvim", -- for input provider snacks
       "nvim-tree/nvim-web-devicons", -- or echasnovski/mini.icons
-      "zbirenbaum/copilot.lua", -- for providers='copilot'
       {
         -- support for image pasting
         "HakonHarnes/img-clip.nvim",
