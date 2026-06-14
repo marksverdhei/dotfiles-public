@@ -13,6 +13,11 @@ end
 
 vim.opt.rtp:prepend(lazypath)
 
+-- Restore the `all = false` treesitter shim that Neovim 0.12 dropped, so the
+-- archived nvim-treesitter master branch stops crashing on list-form matches.
+-- Must run before lazy loads nvim-treesitter (which registers the handlers).
+require "configs.ts_compat"
+
 local lazy_config = require "configs.lazy"
 
 -- load plugins

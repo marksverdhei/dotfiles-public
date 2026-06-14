@@ -49,3 +49,8 @@ alias d1='CUDA_VISIBLE_DEVICES=1'
 alias xo='xdg-open'
 
 alias var='create_var'
+
+ctxt() {
+  local a="$1"
+  figlet -f slant "$a" | lolcat
+}
