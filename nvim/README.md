@@ -187,6 +187,8 @@ All custom user commands defined in `cmds.lua`:
 | `:ToggleBashMultiline` | `ToggleBashMultiline` | Collapse/expand bash commands with line continuations |
 | `:ToggleNvtop` | `ToggleNvtop` | Toggle nvtop monitoring panel in vertical split |
 | `:ToggleNvimTreeWidth` | `ToggleNvimTreeWidth` | Toggle NvimTree between default and auto-fit width |
+| `:WorkspaceLumi` | `WorkspaceLumi` | Open workspace preset: file tree + terminal with lumi |
+| `:ToggleAnsi` | `ToggleAnsi` | Toggle ANSI escape code color rendering |
 
 ### Command Details
 
@@ -209,6 +211,12 @@ All custom user commands defined in `cmds.lua`:
 
 #### NvimTree
 - **ToggleNvimTreeWidth**: Dynamically expands tree to fit longest filename, or resets to default (30 cols)
+
+#### Workspace Preset
+- **WorkspaceLumi**: Opens NvimTree file tree and a vertical split terminal running the `lumi` command
+
+#### ANSI Renderer
+- **ToggleAnsi**: Strips ANSI escape codes from the current buffer and applies color extmarks to render pixel art
 
 ## LSP Servers
 
