@@ -4,6 +4,7 @@ notes.txt
 # Private dotfiles (cloned separately when authenticated)
 private/
 bash/private
+private-themes/
 
 # Generated configs
 nvim/lua/chadrc.lua
