@@ -1,0 +1,47 @@
+#!/bin/bash
+# notify-agent — send a desktop notification branded with the SENDING agent's
+# avatar, so the user can see at a glance which agent pinged them.
+#
+# The avatar is resolved from the agent registry that `avatar` / director use:
+#   ~/.local/share/agent-tools/avatars/<key>.png   (falls back to default.png)
+# The agent key defaults to the tmux session name (how agents are named on this
+# box, e.g. "centurion"); override with --as <key> or $AGENT_NAME.
+#
+# Usage:
+#   notify-agent "<summary>" ["<body>"] [notify-send options...]
+#   notify-agent --as crystal-mom "gems merged" "ctx 96k→192k" -u normal
+#   notify-agent "Build done" "all green" -t 6000 -u normal -A "open=Open log"
+#
+# Any trailing notify-send flags (-u, -t, -A, -h, …) pass straight through.
+set -uo pipefail
+
+AVATAR_DIR="${AGENT_AVATAR_DIR:-$HOME/.local/share/agent-tools/avatars}"
+
+agent=""
+if [[ ${1:-} == "--as" ]]; then
+  agent="${2:?--as needs an agent key}"; shift 2
+fi
+# Resolve self: explicit --as > $AGENT_NAME > director whoami (authoritative
+# agent identity) > tmux session > hostname.
+[[ -z $agent ]] && agent="${AGENT_NAME:-}"
+if [[ -z $agent ]] && command -v director >/dev/null 2>&1; then
+  agent="$(director whoami --tsv 2>/dev/null | cut -f3)"
+  [[ $agent == "-" ]] && agent=""
+fi
+agent="${agent:-$(tmux display-message -p '#S' 2>/dev/null)}"
+agent="${agent:-$(hostname -s 2>/dev/null)}"
+agent="${agent:-agent}"
+
+icon="$AVATAR_DIR/$agent.png"
+[[ -f $icon ]] || icon="$AVATAR_DIR/default.png"
+[[ -f $icon ]] || icon=""   # last resort: no icon
+
+summary="${1:-$agent}"
+[[ $# -gt 0 ]] && shift
+body=""
+if [[ $# -gt 0 && ${1:0:1} != "-" ]]; then body="$1"; shift; fi
+
+args=(-a "$agent")
+[[ -n $icon ]] && args+=(-i "$icon")
+
+exec notify-send "${args[@]}" "$summary" "$body" "$@"

@@ -1,0 +1,119 @@
+#!/bin/bash
+# decide — ask the user a decision via the Walker desktop overlay (gum-like, but
+# on the desktop, not in a terminal). Pops a Walker dmenu with the given options
+# plus a fill-in entry; prints the chosen or typed answer to stdout.
+#
+# This is the desktop-overlay analogue of an agent's built-in question widget:
+# call it from a script/agent when you need a human decision and the user may
+# not be looking at the terminal (voice mode, second monitor, screen sharing).
+#
+# CONVENTION — recommended tiering is ENFORCED:
+#   Pass options best-first. Option #1 is shown as the recommendation
+#   (⭐ … ·recommended) and every option is enumerated (1. 2. 3.). The numbering
+#   and markers are display-only; the CLEAN original option text is returned
+#   (Walker --index maps the pick back to the undecorated value).
+#
+# Walker dmenu cannot return free-typed text that matches no option, so the
+# fill-in is an explicit "✎ Type your own…" entry that opens a second
+# --inputonly prompt. Picking a listed option is ONE widget; the fill-in widget
+# only appears if the user chooses to type their own answer.
+#
+# Usage:
+#   decide "<question>" <best-option> [option ...]
+#   printf 'a\nb\n' | decide "<question>"          # options from stdin (best first)
+#   decide --no-custom "<question>" a b c          # disable the fill-in entry
+#   decide --no-rank   "<question>" a b c          # plain options, no ⭐/numbering
+#   decide "<question>" a b -- --width 500         # pass extra args to walker
+#
+# Exit status:
+#   0  answered  (answer printed to stdout)
+#   1  cancelled (Escape / empty — nothing printed)
+#   2  usage error
+set -uo pipefail
+
+CUSTOM_LABEL="✎ Type your own…"
+allow_custom=1
+rank=1
+
+# --- flag parse (before the prompt) ---
+while (($#)); do
+  case "$1" in
+    --no-custom) allow_custom=0; shift ;;
+    --no-rank)   rank=0; shift ;;
+    -h|--help)   sed -n '2,33p' "$0"; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "decide: unknown flag $1" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+
+prompt="${1:-Choose}"
+[[ $# -gt 0 ]] && shift
+
+# --- collect options (args up to `--`, else stdin) ---
+options=()
+walker_args=()
+while (($#)); do
+  if [[ $1 == "--" ]]; then shift; walker_args=("$@"); break; fi
+  options+=("$1"); shift
+done
+if ((${#options[@]} == 0)) && [[ ! -t 0 ]]; then
+  while IFS= read -r line; do [[ -n $line ]] && options+=("$line"); done
+fi
+
+if [[ -z ${WAYLAND_DISPLAY:-} && -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  echo "decide: no Wayland session (this is a desktop overlay tool)" >&2
+  exit 2
+fi
+
+# Reuse omarchy-launch-walker so the elephant provider + walker service are up
+# and the omarchy theme is applied — exactly like omarchy-menu-select.
+launch() { omarchy-launch-walker "$@" 2>/dev/null; }
+
+n=${#options[@]}
+
+# No options at all → straight to a single free-text input widget.
+if ((n == 0)); then
+  typed=$(launch --dmenu --inputonly -p "$prompt…" --width 360 "${walker_args[@]}")
+  [[ -z $typed ]] && exit 1
+  printf '%s\n' "$typed"
+  exit 0
+fi
+
+# --- build display lines (decoration is display-only; --index maps back) ---
+# Numbers stay in a clean left column; the recommended pick (option #1) is
+# tagged at the end of its line so it is unmistakable to the user.
+menu=()
+for i in "${!options[@]}"; do
+  if ((rank)); then
+    if ((i == 0)); then
+      menu+=("$((i+1)). ${options[$i]}   ⭐ RECOMMENDED")
+    else
+      menu+=("$((i+1)). ${options[$i]}")
+    fi
+  else
+    menu+=("${options[$i]}")
+  fi
+done
+((allow_custom)) && menu+=("$CUSTOM_LABEL")   # fill-in is the last index (== n)
+
+# --index returns the 0-based position of the pick (empty on Escape).
+idx=$(printf '%s\n' "${menu[@]}" \
+  | launch --dmenu --index -p "$prompt…" --width 360 --minheight 1 --maxheight 360 "${walker_args[@]}")
+
+[[ -z $idx || ! $idx =~ ^[0-9]+$ ]] && exit 1   # cancelled / no valid pick
+
+# Fill-in entry chosen → second widget captures arbitrary text.
+if ((allow_custom)) && ((idx == n)); then
+  typed=$(launch --dmenu --inputonly -p "$prompt…" --width 360 "${walker_args[@]}")
+  [[ -z $typed ]] && exit 1
+  printf '%s\n' "$typed"
+  exit 0
+fi
+
+# Listed option → return the CLEAN original value (never the decorated line).
+if ((idx >= 0 && idx < n)); then
+  printf '%s\n' "${options[$idx]}"
+  exit 0
+fi
+exit 1
