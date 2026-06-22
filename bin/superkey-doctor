@@ -1,0 +1,99 @@
+#!/bin/bash
+# superkey-doctor — diagnose a dead Super key and decide: SYSTEM (Hyprland) vs
+# KEYBOARD (firmware/hardware). "I am the computer" — checks the compositor
+# state, the loaded binds, input interference, AND whether the physical key even
+# emits an event.
+#
+#   superkey-doctor            # instant system-side checks + verdict
+#   superkey-doctor --fix      # if a stuck submap is found, reset it
+#   superkey-doctor --capture  # also test the keyboard: press Super when prompted
+#   superkey-doctor --capture --fix
+#
+# Exit: 0 healthy / stuck-submap (recoverable), 1 likely KEYBOARD issue, 2 error.
+set -uo pipefail
+
+do_fix=0; do_capture=0
+for a in "$@"; do case "$a" in
+  --fix) do_fix=1 ;; --capture) do_capture=1 ;;
+  -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+  *) echo "superkey-doctor: unknown arg $a" >&2; exit 2 ;;
+esac; done
+
+if ! command -v hyprctl >/dev/null || [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  echo "Not inside a Hyprland session — can't check compositor state." >&2; exit 2
+fi
+
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+verdict=""
+
+bold "── SYSTEM checks ───────────────────────────────"
+
+# 1. Stuck submap — the #1 cause (all SUPER binds suppressed, typing still works).
+submap=$(hyprctl submap 2>/dev/null)
+if [[ -n $submap && $submap != "default" ]]; then
+  echo "✗ Active submap: '$submap'  ← STUCK SUBMAP suppresses all global binds"
+  verdict="SYSTEM: stuck submap '$submap'"
+  if (( do_fix )); then
+    hyprctl dispatch submap reset >/dev/null 2>&1 && echo "  → ran 'submap reset'; now: '$(hyprctl submap)'"
+  else
+    echo "  → fix: hyprctl dispatch submap reset   (or rerun with --fix)"
+  fi
+else
+  echo "✓ Submap: default (not stuck)"
+fi
+
+# 2. Config errors / binds actually loaded.
+errs=$(hyprctl configerrors 2>/dev/null | grep -cvE '^\s*$')
+[[ $errs -gt 0 ]] && { echo "✗ $errs Hyprland config error(s) — run 'hyprctl configerrors'"; verdict="${verdict:-SYSTEM: config errors}"; } || echo "✓ No config errors"
+sbinds=$(hyprctl binds -j 2>/dev/null | jq '[.[]|select(.modmask==64 or .modmask==65 or .modmask==66 or .modmask==68)]|length' 2>/dev/null)
+[[ ${sbinds:-0} -gt 0 ]] && echo "✓ SUPER binds loaded: $sbinds" || { echo "✗ NO SUPER binds loaded — config didn't apply"; verdict="${verdict:-SYSTEM: binds missing}"; }
+
+# 3. Input interference: key remapper, IME grab, or a fullscreen keyboard grab.
+rm=$(pgrep -a -f 'keyd|kanata|xremap|input-remapper|kmonad' 2>/dev/null | grep -v superkey-doctor)
+[[ -n $rm ]] && echo "⚠ key remapper running: $(echo "$rm" | awk '{print $1, $2}' | head -1) (could intercept Super)" || echo "✓ No key remapper"
+pgrep -x fcitx5 >/dev/null 2>&1 && echo "⚠ fcitx5 IME running (main kbd: $(hyprctl devices -j|jq -r '.keyboards[]|select(.main).name')) — rarely grabs Super, but can"
+fs=$(hyprctl activewindow -j 2>/dev/null | jq -r 'select(.fullscreen>0)|.class' 2>/dev/null)
+[[ -n $fs ]] && echo "⚠ fullscreen window focused ($fs) — may hold a keyboard grab"
+
+# 4. Keyboard test — does the physical Super key emit an event at all?
+#    Capture every keyboard's evdev to a file (avoids the pipe/SIGTERM/buffer
+#    race), then match only the LIVE event line. evtest also prints a capability
+#    dump that *names* KEY_LEFTMETA, so we must match '^Event:' (a real press),
+#    never the capability listing — otherwise it always false-reports "fine".
+if (( do_capture )); then
+  bold ""; bold "── KEYBOARD test (evdev capture) ───────────────"
+  mapfile -t kbds < <(ls /dev/input/by-id/*-event-kbd 2>/dev/null)
+  if (( ${#kbds[@]} == 0 )); then
+    echo "⚠ no keyboard event devices found — skipping keyboard test"
+  elif ! command -v evtest >/dev/null; then
+    echo "⚠ evtest not installed (pacman -S evtest) — skipping keyboard test"
+  else
+    echo "Press & release the Super (⊞ Win) key a few times within 6 seconds…"
+    tmpd=$(mktemp -d); pids=()
+    for i in "${!kbds[@]}"; do
+      timeout 6 stdbuf -oL evtest "${kbds[$i]}" >"$tmpd/$i.log" 2>/dev/null & pids+=($!)
+    done
+    wait "${pids[@]}" 2>/dev/null
+    if grep -qhE '^Event:.*\(KEY_(LEFT|RIGHT)META\)' "$tmpd"/*.log 2>/dev/null; then
+      src=$(basename "$(grep -lE '^Event:.*\(KEY_(LEFT|RIGHT)META\)' "$tmpd"/*.log | head -1)" .log)
+      echo "✓ Super KEY EMITS events (on $(basename "${kbds[$src]}")) → keyboard is fine; issue is SYSTEM-side."
+      [[ -z $verdict ]] && verdict="SYSTEM: key emits but binds don't fire (re-check submap/grab above)"
+    else
+      echo "✗ No Super event on any keyboard during the window → the key did NOT emit."
+      echo "  → KEYBOARD issue: Wooting Win-key lock / wrong on-board profile / firmware."
+      echo "    Fix in Wootility or the keyboard Fn-combo; or replug (it re-enumerated 12:29 today)."
+      verdict="KEYBOARD: Super key emits nothing (firmware/Win-lock)"
+    fi
+    rm -rf "$tmpd"
+  fi
+fi
+
+bold ""; bold "── VERDICT ─────────────────────────────────────"
+if [[ -n $verdict ]]; then
+  echo "$verdict"
+  [[ $verdict == KEYBOARD:* ]] && exit 1 || exit 0
+else
+  echo "System looks healthy. If Super still fails, run:  superkey-doctor --capture"
+  echo "(that proves whether the keyboard emits the key — rules out the Wooting itself)."
+  exit 0
+fi

@@ -24,8 +24,6 @@ map('v', 'yA', '<ESC><cmd>%yank<CR>', { desc = 'Yank entire file without moving 
 
 map('n', 'gp', '"_ddP', { desc = 'Replace line with yanked content' })
 
-map("n", "co", "<cmd>CopilotChatOpen<CR>", { desc = "Open copilot chat" })
-
 map('n', 'vv', 'V', { desc = 'Start linewise visual mode' })
 
 map('n', '<leader>c', ':MdToggleCheckbox<CR>', { noremap = true, silent = true })

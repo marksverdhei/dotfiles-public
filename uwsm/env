@@ -8,7 +8,7 @@ export PATH=$OMARCHY_PATH/bin:$PATH
 source ~/.config/uwsm/default
 
 # Activate mise if present on the system
-omarchy-cmd-present mise && eval "$(mise activate bash)"
+omarchy-cmd-present mise && eval "$(mise activate bash --shims)"
 
 # Speaker service port (default 30186, centurion uses 8186)
 export SPEAKER_SERVICE_PORT=8186

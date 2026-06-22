@@ -1,0 +1,43 @@
+#!/bin/bash
+# say-notify — toggle desktop notifications for every `say` (agent TTS).
+#
+# The `say` tool fires a desktop alert on each utterance when the state file
+# /tmp/say-alert-default exists (it checks `[[ -f $SAY_ALERT_FILE ]]` at call
+# time). This is a friendly, discoverable toggle for that hook — flip it on and
+# every agent `say` also pops a system notification; flip it off for silence.
+#
+# Usage:
+#   say-notify            # toggle on/off
+#   say-notify on
+#   say-notify off
+#   say-notify status
+#
+# Same effect as `say --toggle-alert`, but lives in dotfiles and reports state
+# clearly. The notification itself is emitted by `say`.
+set -uo pipefail
+
+STATE_FILE="${SAY_ALERT_FILE:-/tmp/say-alert-default}"
+
+is_on() { [[ -f $STATE_FILE ]]; }
+report() { if is_on; then echo "say notifications: ON"; else echo "say notifications: OFF"; fi; }
+
+cmd="${1:-toggle}"
+case "$cmd" in
+  on)     : > "$STATE_FILE" ;;
+  off)    rm -f "$STATE_FILE" ;;
+  status) report; exit 0 ;;
+  toggle|"") if is_on; then rm -f "$STATE_FILE"; else : > "$STATE_FILE"; fi ;;
+  -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+  *) echo "say-notify: unknown command '$cmd' (use on|off|toggle|status)" >&2; exit 2 ;;
+esac
+
+report
+
+# Confirm the change on-screen, branded with this agent's avatar if available.
+if command -v notify-agent >/dev/null 2>&1; then
+  if is_on; then
+    notify-agent "say notifications ON" "every agent utterance will alert here" -t 3000 -u low
+  else
+    notify-agent "say notifications OFF" "utterances are silent (TTS unaffected)" -t 3000 -u low
+  fi
+fi

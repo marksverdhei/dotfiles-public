@@ -358,3 +358,13 @@ binadd() {
   ln -s "$binary" "$HOME/.local/bin/"
   echo "Linked $1 to $HOME/.local/bin/"
 }
+
+
+
+
+ccor() {
+  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+  export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
+  export ANTHROPIC_API_KEY="" # Important: Must be explicitly empty
+  unleash ccor
+}

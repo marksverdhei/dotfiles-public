@@ -30,11 +30,38 @@ clean_scales() {
   }'
 }
 
+configured_field() {
+  # Extract one comma-separated field (1-indexed) from the monitor= line for $1.
+  # Hyprland's monitor= line:
+  #   monitor = NAME, RESOLUTION, POSITION, SCALE [, transform, N] [, vrr, N] [, bitdepth, N]
+  # Fields:  1=NAME, 2=RESOLUTION, 3=POSITION, 4=SCALE, 5+=optional kw/value pairs
+  local name=$1 field=$2
+  [[ -f "$MONITORS_CONF" ]] || return
+  grep -E "^monitor\s*=\s*$name," "$MONITORS_CONF" | head -1 | awk -F',' -v f="$field" '{print $f}' | tr -d ' '
+}
+
 configured_scale() {
+  configured_field "$1" 4
+}
+
+configured_position() {
+  # Returns "XxY" (e.g. "0x-1080"). Empty if no config line.
+  configured_field "$1" 3
+}
+
+configured_transform() {
+  # Returns the integer transform value if the line has "transform, N", else empty.
+  # Scans optional key/value pairs starting at field 5.
   local name=$1
-  if [[ -f "$MONITORS_CONF" ]]; then
-    grep -E "^monitor\s*=\s*$name," "$MONITORS_CONF" | head -1 | awk -F',' '{print $NF}' | tr -d ' '
-  fi
+  [[ -f "$MONITORS_CONF" ]] || return
+  grep -E "^monitor\s*=\s*$name," "$MONITORS_CONF" | head -1 | awk -F',' '
+    {
+      for (i = 5; i <= NF; i += 2) {
+        k = $i; v = $(i+1)
+        gsub(/^ +| +$/, "", k); gsub(/^ +| +$/, "", v)
+        if (k == "transform") { print v; exit }
+      }
+    }'
 }
 
 next_clean_up() {
@@ -56,31 +83,43 @@ nearest_clean() {
   '
 }
 
-# Read monitor data sorted by x position (left to right)
-monitors_json=$(hyprctl monitors -j | jq -c 'sort_by(.x) | .[]')
+# Read monitor data — change SCALE only.
+#
+# Position (x, y) and transform are ALWAYS re-asserted from monitors.conf, not
+# from live state. Rationale: live state can drift (other scripts, hot-plugs,
+# manual hyprctl invocations). monitors.conf is the canonical source of truth
+# for layout. This script is a scale dial; it must not become a vehicle for
+# whatever bad state happens to be live at the moment.
+#
+# Falls back to live values only when a monitor isn't in monitors.conf.
+monitors_json=$(hyprctl monitors -j | jq -c '.[]')
 
-# First pass: compute new scales
-declare -a names widths heights refreshes scales
-i=0
+cmds=()
 while read -r monitor; do
-  names[$i]=$(jq -r '.name' <<< "$monitor")
-  widths[$i]=$(jq -r '.width' <<< "$monitor")
-  heights[$i]=$(jq -r '.height' <<< "$monitor")
-  refreshes[$i]=$(jq -r '.refreshRate' <<< "$monitor")
+  name=$(jq -r '.name' <<< "$monitor")
+  w=$(jq -r '.width' <<< "$monitor")
+  h=$(jq -r '.height' <<< "$monitor")
+  refresh=$(jq -r '.refreshRate' <<< "$monitor")
   current=$(jq -r '.scale' <<< "$monitor")
+  live_x=$(jq -r '.x' <<< "$monitor")
+  live_y=$(jq -r '.y' <<< "$monitor")
+  live_transform=$(jq -r '.transform' <<< "$monitor")
+
+  cfg_xform=$(configured_transform "$name")
+  transform="${cfg_xform:-$live_transform}"
 
   case "$1" in
     in)
-      new=$(next_clean_up "$current" "${widths[$i]}" "${heights[$i]}")
+      new=$(next_clean_up "$current" "$w" "$h")
       new=${new:-$current}
       ;;
     out)
-      new=$(next_clean_down "$current" "${widths[$i]}" "${heights[$i]}")
+      new=$(next_clean_down "$current" "$w" "$h")
       new=${new:-$current}
       ;;
     reset)
-      cfg=$(configured_scale "${names[$i]}")
-      new=$(nearest_clean "${cfg:-1.0}" "${widths[$i]}" "${heights[$i]}")
+      cfg=$(configured_scale "$name")
+      new=$(nearest_clean "${cfg:-1.0}" "$w" "$h")
       ;;
     *)
       echo "Usage: hypr-zoom in|out|reset" >&2
@@ -92,19 +131,28 @@ while read -r monitor; do
   if (( $(echo "$new < $MIN" | bc -l) )); then new=$MIN; fi
   if (( $(echo "$new > $MAX" | bc -l) )); then new=$MAX; fi
 
-  scales[$i]=$new
-  ((i++))
-done <<< "$monitors_json"
+  # Position — source of truth: monitors.conf, fall back to live state.
+  # monitors.conf authors the layout at each monitor's *configured* scale, so
+  # its offsets are only valid at that scale. Re-scale the offset by
+  # (configured_scale / new_scale) so edge-adjacency holds at any zoom —
+  # otherwise a stacked monitor opens a vertical gap (dead zone) on zoom, which
+  # was the old bug. Origin (0,0) is scale-invariant; `reset` (new ==
+  # configured_scale) reproduces the authored layout exactly.
+  cfg_pos=$(configured_position "$name")
+  if [[ -n "$cfg_pos" ]]; then
+    cfg_scale=$(configured_scale "$name"); cfg_scale=${cfg_scale:-1}
+    cx=${cfg_pos%x*}; cy=${cfg_pos#*x}
+    read -r nx ny < <(awk -v x="$cx" -v y="$cy" -v cs="$cfg_scale" -v ns="$new" 'BEGIN {
+      fx = x * cs / ns; fy = y * cs / ns
+      printf "%d %d", (fx < 0 ? int(fx - 0.5) : int(fx + 0.5)), (fy < 0 ? int(fy - 0.5) : int(fy + 0.5))
+    }')
+    pos="${nx}x${ny}"
+  else
+    pos="${live_x}x${live_y}"
+  fi
 
-# Second pass: compute positions left-to-right (no gaps, no overlaps)
-cmds=()
-x=0
-for ((j=0; j<i; j++)); do
-  cmds+=("keyword monitor ${names[$j]},${widths[$j]}x${heights[$j]}@${refreshes[$j]},${x}x0,${scales[$j]}")
-  # Advance x by logical width of this monitor
-  logical_w=$(awk "BEGIN { printf \"%d\", ${widths[$j]} / ${scales[$j]} }")
-  x=$((x + logical_w))
-done
+  cmds+=("keyword monitor ${name},${w}x${h}@${refresh},${pos},${new},transform,${transform}")
+done <<< "$monitors_json"
 
 # Apply all monitor changes in a single batch call
 if [[ ${#cmds[@]} -gt 0 ]]; then

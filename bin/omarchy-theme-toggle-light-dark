@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Toggle between a configured light and dark Omarchy theme.
+#
+# Reads pair from ~/.config/omarchy/light-dark.conf:
+#   LIGHT_THEME=catppuccin-latte
+#   DARK_THEME=aether
+#
+# If the file is missing, sensible defaults are used and the file is created.
+# Themes must exist in either ~/.local/share/omarchy/themes/ or
+# ~/.config/omarchy/themes/.
+
+set -euo pipefail
+
+# Make sure omarchy-* helpers are reachable when invoked outside an
+# interactive shell (e.g. .desktop launchers).
+export PATH="$HOME/.local/share/omarchy/bin:$PATH"
+
+CONF="$HOME/.config/omarchy/light-dark.conf"
+DEFAULT_LIGHT="catppuccin-latte"
+DEFAULT_DARK="aether"
+
+if [[ ! -f $CONF ]]; then
+  mkdir -p "$(dirname "$CONF")"
+  cat >"$CONF" <<EOF
+# Theme pair used by omarchy-theme-toggle-light-dark
+LIGHT_THEME=$DEFAULT_LIGHT
+DARK_THEME=$DEFAULT_DARK
+EOF
+fi
+
+# shellcheck disable=SC1090
+source "$CONF"
+LIGHT_THEME="${LIGHT_THEME:-$DEFAULT_LIGHT}"
+DARK_THEME="${DARK_THEME:-$DEFAULT_DARK}"
+
+current=""
+if [[ -f $HOME/.config/omarchy/current/theme.name ]]; then
+  current=$(<"$HOME/.config/omarchy/current/theme.name")
+fi
+
+if [[ $current == "$LIGHT_THEME" ]]; then
+  target=$DARK_THEME
+  label="Dark"
+else
+  target=$LIGHT_THEME
+  label="Light"
+fi
+
+omarchy-theme-set "$target"
+
+if command -v notify-send >/dev/null; then
+  notify-send "  $label theme" "$target"
+fi
