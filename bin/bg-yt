@@ -72,7 +72,7 @@ if [[ -z $SLUG ]]; then
   SLUG="${VIDEO_ID,,}"
 fi
 
-VIDEO_PATH="$VIDEOS_DIR/${SLUG}.webm"
+VIDEO_PATH="$VIDEOS_DIR/${SLUG}.mkv"
 ICON_PATH="$ICONS_DIR/${SLUG}.png"
 DESKTOP_PATH="$APPS_DIR/bg-${CATEGORY}-${SLUG}.desktop"
 
@@ -81,7 +81,7 @@ if [[ -f $VIDEO_PATH && $FORCE -eq 0 ]]; then
 else
   echo "downloading → $VIDEO_PATH"
   yt-dlp -f 'bv*[ext=webm]+ba[ext=webm]/bv*+ba/best' \
-    --merge-output-format webm \
+    --merge-output-format mkv \
     -o "$VIDEO_PATH" "$URL"
 fi
 
