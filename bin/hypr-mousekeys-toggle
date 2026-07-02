@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Toggle: mouse-4 (back thumb button) -> F15, mouse-5 (forward thumb button) -> F14.
+#
+# Only the two side thumb buttons (BTN_SIDE / BTN_EXTRA) are rebound. The scroll wheel
+# (both its click AND rotation) is never touched, so middle-click and scrolling keep working.
+#
+# State persists across Hyprland reloads/reboots via a sourced toggle conf
+# (~/.local/state/omarchy/toggles/hypr/*.conf, sourced from hyprland.conf) and is
+# also applied LIVE via hyprctl so the toggle takes effect instantly, no reload needed.
+set -euo pipefail
+
+CONF="$HOME/.local/state/omarchy/toggles/hypr/mousekeys.conf"
+
+# libinput/evdev button codes (see /usr/include/linux/input-event-codes.h)
+BTN_SIDE=275     # BTN_SIDE   0x113 - "mouse 4" / back thumb button
+BTN_EXTRA=276    # BTN_EXTRA  0x114 - "mouse 5" / forward thumb button
+# evdev key codes for ydotool
+F15=185
+F14=184
+
+# A side-button CLICK emits a tap (press+release) of the F-key.
+# (Want push-to-talk HOLD instead? change each line to a `bind` for `KEY:1`
+#  plus a matching `bindr` for `KEY:0`.)
+read -r -d '' BINDS <<EOF || true
+# Managed by hypr-mousekeys-toggle - do not edit by hand; use SUPER ALT M to toggle.
+bind = , mouse:${BTN_SIDE}, exec, ydotool key ${F15}:1 ${F15}:0
+bind = , mouse:${BTN_EXTRA}, exec, ydotool key ${F14}:1 ${F14}:0
+EOF
+
+enable() {
+  mkdir -p "$(dirname "$CONF")"
+  printf '%s\n' "$BINDS" > "$CONF"
+  hyprctl --batch \
+    "keyword bind ,mouse:${BTN_SIDE},exec,ydotool key ${F15}:1 ${F15}:0 ; keyword bind ,mouse:${BTN_EXTRA},exec,ydotool key ${F14}:1 ${F14}:0" \
+    >/dev/null
+  notify-send -u low -t 1800 "Mouse → F-keys: ON" "Mouse-4 = F15   ·   Mouse-5 = F14" 2>/dev/null || \
+    notify-send -u low -t 1800 "Mouse -> F-keys: ON" "Mouse-4 = F15  -  Mouse-5 = F14"
+}
+
+disable() {
+  rm -f "$CONF"
+  hyprctl --batch \
+    "keyword unbind ,mouse:${BTN_SIDE} ; keyword unbind ,mouse:${BTN_EXTRA}" \
+    >/dev/null
+  notify-send -u low -t 1800 "Mouse -> F-keys: OFF" "Native mouse-4 & mouse-5 restored" 2>/dev/null || true
+}
+
+if [[ -f "$CONF" ]]; then
+  disable
+else
+  enable
+fi
