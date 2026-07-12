@@ -18,3 +18,9 @@ fi
 slink "$DOTFILES/ghostty" "$HOME/.config/ghostty"
 slink "$DOTFILES/vim/.vimrc" "$HOME/.vimrc"
 slink "$DOTFILES/heartbeat" "$HOME/.config/heartbeat"
+
+# Waybar (transparent style) — was only ever linked by hand on centurion,
+# so fresh boxes kept the stock Omarchy bar. Desktop boxes only.
+if command -v waybar &>/dev/null; then
+  slink "$DOTFILES/waybar" "$HOME/.config/waybar"
+fi

@@ -1,7 +1,10 @@
-# OS detection
+# OS detection. HaiOS boxes set ID=haios and advertise the lineage via
+# ID_LIKE="omarchy arch" — match on either, or the whole Omarchy/Hyprland
+# section (incl. disabling the stock Omarchy aliases) silently skips there.
 is_omarchy() {
+  local ID="" ID_LIKE=""
   [[ -f /etc/os-release ]] && . /etc/os-release
-  [[ "$ID" == "arch" ]] && command -v hyprctl &>/dev/null
+  [[ "$ID" == "arch" || " $ID $ID_LIKE " == *arch* ]] && command -v hyprctl &>/dev/null
 }
 
 section "Shell"
@@ -57,6 +60,18 @@ if is_omarchy; then
     [[ -f "$HYPR_DST/hyprland.conf" ]] && \
       cp -a "$HYPR_DST/hyprland.conf" "$HYPR_DST/hyprland.conf.bak.$(date +%s)"
     cp "$DOTFILES/hypr/hyprland.default.conf" "$HYPR_DST/hyprland.conf"
+    # No private dotfiles on this box → the private source lines would raise
+    # Hyprland config errors (missing file). The installed conf is a copy, so
+    # comment them out locally; a later private clone + re-run restores them.
+    if [[ ! -d "$DOTFILES_PRIVATE" ]]; then
+      sed -i 's|^source = ~/dotfiles/private/|# &|' "$HYPR_DST/hyprland.conf"
+    fi
+    # HaiOS ships qube/VM-specific rules in hai-os.conf (xwaylandvideobridge
+    # rules, cursor fix in qubes) — keep it sourced across the replacement.
+    if [[ -f "$HYPR_DST/hai-os.conf" ]] && ! grep -q 'hai-os\.conf' "$HYPR_DST/hyprland.conf"; then
+      printf '\n# HaiOS distro rules (preserved by dotfiles bootstrap)\nsource = ~/.config/hypr/hai-os.conf\n' \
+        >> "$HYPR_DST/hyprland.conf"
+    fi
     ok "hyprland.conf ($_replace_reason)"
   else
     skip "hyprland.conf (already customized)"
