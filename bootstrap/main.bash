@@ -60,12 +60,15 @@ if is_omarchy; then
     [[ -f "$HYPR_DST/hyprland.conf" ]] && \
       cp -a "$HYPR_DST/hyprland.conf" "$HYPR_DST/hyprland.conf.bak.$(date +%s)"
     cp "$DOTFILES/hypr/hyprland.default.conf" "$HYPR_DST/hyprland.conf"
-    # No private dotfiles on this box → the private source lines would raise
-    # Hyprland config errors (missing file). The installed conf is a copy, so
-    # comment them out locally; a later private clone + re-run restores them.
-    if [[ ! -d "$DOTFILES_PRIVATE" ]]; then
-      sed -i 's|^source = ~/dotfiles/private/|# &|' "$HYPR_DST/hyprland.conf"
-    fi
+    # Private source lines raise Hyprland "globbing error: found no match"
+    # when the sourced file is absent (a private/ stub dir is not enough —
+    # check each FILE). The installed conf is a copy, so comment missing ones
+    # out locally; a later private clone + re-run restores them.
+    while IFS= read -r _line; do
+      _src="${_line#source = }"
+      [[ -f "${_src/#\~/$HOME}" ]] || \
+        sed -i "s|^${_line//|/\\|}\$|# &|" "$HYPR_DST/hyprland.conf"
+    done < <(grep '^source = ~/dotfiles/private/' "$HYPR_DST/hyprland.conf")
     # HaiOS ships qube/VM-specific rules in hai-os.conf (xwaylandvideobridge
     # rules, cursor fix in qubes) — keep it sourced across the replacement.
     if [[ -f "$HYPR_DST/hai-os.conf" ]] && ! grep -q 'hai-os\.conf' "$HYPR_DST/hyprland.conf"; then
