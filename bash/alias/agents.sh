@@ -5,7 +5,6 @@ alias ch='aichat'
 alias cl='claude'
 alias clr='claude --resume'
 alias lcc='claude-local'
-alias clc='claude --continue'
 
 # Codex with fzf profile picker + full-auto
 cx() {
