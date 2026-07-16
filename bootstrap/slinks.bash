@@ -19,10 +19,14 @@ slink "$DOTFILES/ghostty" "$HOME/.config/ghostty"
 slink "$DOTFILES/vim/.vimrc" "$HOME/.vimrc"
 slink "$DOTFILES/heartbeat" "$HOME/.config/heartbeat"
 
-# Waybar (transparent style) — was only ever linked by hand on centurion,
-# so fresh boxes kept the stock Omarchy bar. Desktop boxes only.
-if command -v waybar &>/dev/null; then
-  slink "$DOTFILES/waybar" "$HOME/.config/waybar"
+# Waybar — prefer the private per-host config (like tmux above), then the
+# private shared one, then the public dir. The MK2 reinstall taught us the
+# hard way: a hand-made link dies with the box; bootstrap must own this.
+WAYBAR_SRC="$DOTFILES/private/waybar/$(hostname)"
+[[ -d "$WAYBAR_SRC" ]] || WAYBAR_SRC="$DOTFILES/private/waybar/shared"
+[[ -d "$WAYBAR_SRC" ]] || WAYBAR_SRC="$DOTFILES/waybar"
+if command -v waybar &>/dev/null && [[ -d "$WAYBAR_SRC" ]]; then
+  slink "$WAYBAR_SRC" "$HOME/.config/waybar"
 fi
 
 # ── tmux (pointer file, NOT a symlink) ────────
