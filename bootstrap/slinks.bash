@@ -24,3 +24,27 @@ slink "$DOTFILES/heartbeat" "$HOME/.config/heartbeat"
 if command -v waybar &>/dev/null; then
   slink "$DOTFILES/waybar" "$HOME/.config/waybar"
 fi
+
+# ── tmux (pointer file, NOT a symlink) ────────
+# Omarchy ships its own ~/.config/tmux/tmux.conf (prefix C-Space + prefix2 C-b
+# = a double leader key) and `omarchy-refresh-tmux` cp -f's it back over ours.
+# A symlink is unsafe: that cp -f would write THROUGH the link and clobber the
+# repo file. So we install a tiny pointer that source-files the real config —
+# if Omarchy overwrites the pointer, only the pointer is lost (repo stays safe),
+# and re-running this bootstrap restores it. Prefer the private config.
+TMUX_SRC="$DOTFILES/private/tmux/tmux1.conf"
+[[ -f "$TMUX_SRC" ]] || TMUX_SRC="$DOTFILES/tmux/tmux1.conf"
+if [[ -f "$TMUX_SRC" ]]; then
+  mkdir -p "$HOME/.config/tmux"
+  {
+    echo "# dotfiles-managed pointer — real config lives in the repo."
+    echo "# NOTE: \`omarchy-refresh-tmux\` will clobber THIS file (repo stays safe);"
+    echo "# re-run bootstrap to restore it."
+    echo "source-file $TMUX_SRC"
+  } > "$HOME/.config/tmux/tmux.conf"
+  # TPM (referenced by the config); plugins install to ~/.config/tmux/plugins/.
+  if [[ ! -d "$HOME/.tmux/plugins/tpm" ]]; then
+    git clone --depth 1 https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm" >/dev/null 2>&1
+  fi
+  ok "tmux config pointed at $TMUX_SRC (prefix C-Space, no double leader)"
+fi
