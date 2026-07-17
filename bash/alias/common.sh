@@ -3,23 +3,22 @@ alias ap='ansible-playbook'
 alias apb='ansible-playbook -K'
 
 # Clipboard aliases - Wayland (wl-copy/wl-paste) vs X11 (xclip)
-if [[ -f /etc/os-release ]]; then
-  . /etc/os-release
-  if [[ "$ID" == "arch" ]] && command -v wl-copy &>/dev/null; then
-    alias xcp='wl-copy'
-    alias xps='wl-paste'
-    alias xcpf='wl-copy <'
-    alias xpsf='wl-paste > '
-    alias clump='wl-paste > '
-    alias xcprint='tee >(wl-copy)'
-  else
-    alias xcp='xclip -selection clipboard'
-    alias xps='xclip -selection clipboard -o'
-    alias xcpf='xclip -selection clipboard <'
-    alias xpsf='xclip -selection clipboard -o > '
-    alias clump='xclip -selection clipboard -o > '
-    alias xcprint='tee >(xclip -selection clipboard)'
-  fi
+# Pick backend by session type (Wayland vs X11), not distro ID — os-release
+# ID varies across Arch derivatives (e.g. haios), so gate on the display server.
+if command -v wl-copy &>/dev/null && [[ "${XDG_SESSION_TYPE:-}" == "wayland" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+  alias xcp='wl-copy'
+  alias xps='wl-paste'
+  alias xcpf='wl-copy <'
+  alias xpsf='wl-paste > '
+  alias clump='wl-paste > '
+  alias xcprint='tee >(wl-copy)'
+else
+  alias xcp='xclip -selection clipboard'
+  alias xps='xclip -selection clipboard -o'
+  alias xcpf='xclip -selection clipboard <'
+  alias xpsf='xclip -selection clipboard -o > '
+  alias clump='xclip -selection clipboard -o > '
+  alias xcprint='tee >(xclip -selection clipboard)'
 fi
 alias cptree="tree | xcp"
 alias dv='deactivate'
