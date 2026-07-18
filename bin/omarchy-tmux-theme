@@ -1,5 +1,26 @@
 #!/bin/bash
-COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), 'blue') if os.path.exists(f) else 'blue')")
+# Per-host tmux accent. Resolution order:
+#   1. explicit host entry in ~/dotfiles/private/tmux/colors.json (curated)
+#   2. HaiOS fleet accent, ~/.config/hai-os/accent.env — gems and the kata
+#      dev VMs (pilgrim, …) seed this from the hai-os accent map at start;
+#      it's the only source on public-only-dotfiles boxes
+#   3. plain blue
+COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), '') if os.path.exists(f) else '')" 2>/dev/null)
+if [ -z "$COLOR" ] && [ -f "$HOME/.config/hai-os/accent.env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.config/hai-os/accent.env" 2>/dev/null
+  case "${HAI_OS_ACCENT:-}" in
+    \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+      COLOR="$HAI_OS_ACCENT" ;;
+  esac
+fi
+COLOR=${COLOR:-blue}
+# Bright variant for the active-window title: named colours have a bright*
+# counterpart; hex accents don't, so the hex doubles as its own bright.
+case "$COLOR" in
+  \#*) BRIGHT="$COLOR" ;;
+  *)   BRIGHT="bright$COLOR" ;;
+esac
 
 tmux set -g status-bg default
 tmux set -g status-style "bg=default,fg=default"
@@ -34,8 +55,8 @@ tmux set -g status-justify left
 tmux set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
 tmux set -g window-status-separator ""
 
-# Active window: bright blue bold, with process suffix if different
-tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
+# Active window: bright accent bold, with process suffix if different
+tmux set -g window-status-current-format "#[fg=$BRIGHT,bold]#I:#{pane_id} #W#[fg=$BRIGHT]#{?#{==:#W,#{pane_current_command}},,:#[fg=$BRIGHT]#{=10:pane_current_command}} "
 
 # Top pane border with black background.
 #
