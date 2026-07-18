@@ -15,7 +15,7 @@ alias n='ntl'
 alias o="ollama"
 alias p='python'
 alias q='quiet_background_run'
-alias r='source ~/.bashrc'
+alias r='exec bash'
 alias s='slurm'
 t() { if [ $# -eq 0 ]; then tmux new-session -A -s "$(basename "$PWD")"; else tmux "$@"; fi; }
 alias u='unleash'
