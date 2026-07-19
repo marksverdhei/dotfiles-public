@@ -19,13 +19,24 @@ slink "$DOTFILES/ghostty" "$HOME/.config/ghostty"
 slink "$DOTFILES/vim/.vimrc" "$HOME/.vimrc"
 slink "$DOTFILES/heartbeat" "$HOME/.config/heartbeat"
 
-# Waybar — prefer the private per-host config (like tmux above), then the
-# private shared one, then the public dir. The MK2 reinstall taught us the
-# hard way: a hand-made link dies with the box; bootstrap must own this.
+# Waybar — a private per-host config wins (that box is opting into extras
+# on top of the generic bar, e.g. centurion's cluster lanes). The MK2
+# reinstall taught us the hard way: a hand-made link dies with the box;
+# bootstrap must own this. BUT: on HAIos units the *generic* bar is
+# installed from the hai-os overlay into a real ~/.config/waybar dir
+# (mercury model, 2026-07-19) — the old shared/public fallback would
+# clobber it, so it only applies to non-HAIos boxes with no bar of their
+# own.
 WAYBAR_SRC="$DOTFILES/private/waybar/$(hostname)"
-[[ -d "$WAYBAR_SRC" ]] || WAYBAR_SRC="$DOTFILES/private/waybar/shared"
-[[ -d "$WAYBAR_SRC" ]] || WAYBAR_SRC="$DOTFILES/waybar"
-if command -v waybar &>/dev/null && [[ -d "$WAYBAR_SRC" ]]; then
+if [[ ! -d "$WAYBAR_SRC" ]]; then
+  if [[ -d "$HOME/hai-os" ]] || [[ -e "$HOME/.config/waybar" && ! -L "$HOME/.config/waybar" ]]; then
+    WAYBAR_SRC=""   # hai-os overlay owns the bar — leave it alone
+  else
+    WAYBAR_SRC="$DOTFILES/private/waybar/shared"
+    [[ -d "$WAYBAR_SRC" ]] || WAYBAR_SRC="$DOTFILES/waybar"
+  fi
+fi
+if command -v waybar &>/dev/null && [[ -n "$WAYBAR_SRC" && -d "$WAYBAR_SRC" ]]; then
   slink "$WAYBAR_SRC" "$HOME/.config/waybar"
 fi
 
