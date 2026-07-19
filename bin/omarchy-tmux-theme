@@ -5,6 +5,12 @@
 #      dev VMs (pilgrim, …) seed this from the hai-os accent map at start;
 #      it's the only source on public-only-dotfiles boxes
 #   3. plain blue
+# A session accent (active theme's accent, ~/.config/hai-os/session-accent.env)
+# OVERRIDES all of the above while a theme carries one — theming is temporary,
+# the canonical host accent stays untouched (hai-os #237).
+# Optional $1 = tmux socket path (hai-os theme-set hook applies per server).
+T="tmux"
+[ -n "${1:-}" ] && T="tmux -S $1"
 COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), '') if os.path.exists(f) else '')" 2>/dev/null)
 if [ -z "$COLOR" ] && [ -f "$HOME/.config/hai-os/accent.env" ]; then
   # shellcheck disable=SC1091
@@ -14,6 +20,16 @@ if [ -z "$COLOR" ] && [ -f "$HOME/.config/hai-os/accent.env" ]; then
       COLOR="$HAI_OS_ACCENT" ;;
   esac
 fi
+if [ -f "$HOME/.config/hai-os/session-accent.env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.config/hai-os/session-accent.env" 2>/dev/null
+  if [ "${SESSION_ACCENT_SOURCE:-}" = "theme" ]; then
+    case "${SESSION_ACCENT:-}" in
+      \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+        COLOR="$SESSION_ACCENT" ;;
+    esac
+  fi
+fi
 COLOR=${COLOR:-blue}
 # Bright variant for the active-window title: named colours have a bright*
 # counterpart; hex accents don't, so the hex doubles as its own bright.
@@ -22,22 +38,22 @@ case "$COLOR" in
   *)   BRIGHT="bright$COLOR" ;;
 esac
 
-tmux set -g status-bg default
-tmux set -g status-style "bg=default,fg=default"
+$T set -g status-bg default
+$T set -g status-style "bg=default,fg=default"
 
-tmux set -g pane-active-border-style "fg=$COLOR"
-tmux set -g message-style "bg=default,fg=$COLOR"
-tmux set -g message-command-style "bg=default,fg=$COLOR"
-tmux set -g mode-style "bg=$COLOR,fg=black"
-tmux setw -g clock-mode-colour "$COLOR"
+$T set -g pane-active-border-style "fg=$COLOR"
+$T set -g message-style "bg=default,fg=$COLOR"
+$T set -g message-command-style "bg=default,fg=$COLOR"
+$T set -g mode-style "bg=$COLOR,fg=black"
+$T setw -g clock-mode-colour "$COLOR"
 
 # Use status-left / status-right / window-status-format (tmux 3.4 compatible)
 # Unset status-format to let status-left/right take over
-tmux set -gu status-format
+$T set -gu status-format
 
 # Left: session name + active pane ID in black bg
-tmux set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
-tmux set -g status-left-length 40
+$T set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
+$T set -g status-left-length 40
 
 # Right: fill line + hostname
 # Prepend tmux-continuum's save hook so periodic saves still fire after we
@@ -46,17 +62,17 @@ CONTINUUM_HOOK=""
 if [ -x "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh" ]; then
   CONTINUUM_HOOK="#($HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
 fi
-tmux set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
-tmux set -g status-right-length 40
+$T set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+$T set -g status-right-length 40
 
-tmux set -g status-justify left
+$T set -g status-justify left
 
 # Inactive windows: dim
-tmux set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
-tmux set -g window-status-separator ""
+$T set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
+$T set -g window-status-separator ""
 
 # Active window: bright accent bold, with process suffix if different
-tmux set -g window-status-current-format "#[fg=$BRIGHT,bold]#I:#{pane_id} #W#[fg=$BRIGHT]#{?#{==:#W,#{pane_current_command}},,:#[fg=$BRIGHT]#{=10:pane_current_command}} "
+$T set -g window-status-current-format "#[fg=$BRIGHT,bold]#I:#{pane_id} #W#[fg=$BRIGHT]#{?#{==:#W,#{pane_current_command}},,:#[fg=$BRIGHT]#{=10:pane_current_command}} "
 
 # Top pane border with black background.
 #
