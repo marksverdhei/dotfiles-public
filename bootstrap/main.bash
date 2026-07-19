@@ -92,4 +92,25 @@ if is_omarchy; then
   ok "Hyprland configs linked"
 fi
 
+# ── keyd (system-wide key remaps) ─────────────
+if is_omarchy; then
+  section "keyd"
+  if ! command -v keyd &>/dev/null && sudo -n true 2>/dev/null; then
+    spin "Installing keyd" sudo pacman -S --noconfirm keyd
+  fi
+  if command -v keyd &>/dev/null; then
+    if sudo -n true 2>/dev/null; then
+      sudo mkdir -p /etc/keyd
+      sudo ln -sfn "$DOTFILES/keyd/default.conf" /etc/keyd/default.conf
+      sudo systemctl enable --now keyd &>/dev/null
+      sudo keyd reload &>/dev/null || true
+      ok "keyd remaps active (escape→f14)"
+    else
+      warn "keyd installed but no passwordless sudo — link /etc/keyd/default.conf manually"
+    fi
+  else
+    skip "keyd not installed (no passwordless sudo)"
+  fi
+fi
+
 . "$DOTFILES/bootstrap/prompt.bash"
