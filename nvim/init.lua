@@ -43,6 +43,7 @@ end
 require "options"
 require "autocmds"
 require "cmds"
+require("theme").setup()
 
 vim.schedule(function()
   require "mappings"

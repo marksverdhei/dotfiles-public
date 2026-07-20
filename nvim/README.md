@@ -275,20 +275,43 @@ Location: `lua/snippets/python.lua`
 ## Theme Configuration
 
 ### Default Themes
-- **Dark**: `catppuccin`
+- **Dark**: `hei`
+- **Mid**: `github_mid`
 - **Light**: `github_light`
 
 ### Environment Variables
 You can override themes using environment variables:
 ```bash
-export NVIM_THEME="catppuccin"        # Primary theme
-export NVIM_DARK_THEME="catppuccin"   # Dark theme for toggle
+export NVIM_THEME="hei"               # Primary theme
+export NVIM_DARK_THEME="hei"          # Dark theme for toggle
+export NVIM_MID_THEME="github_mid"     # Mid theme for the three-way cycle
 export NVIM_LIGHT_THEME="github_light" # Light theme for toggle
+export NVIM_APPEARANCE="mid"           # Select dark, mid, or light at startup
 ```
+
+### Mid themes
+
+Every Base46 family in this install that has both a dark and light palette also
+has a readable middle-luminance variant: Ayu, Catppuccin, Default, Everforest,
+Flex/Flexoki, GitHub, Gruvbox, Material, Oceanic, One, OneNord, Penumbra,
+Rose Pine, Seoul256, Solarized, and VS Code.
+
+Use `:ThemeMid` to move the current family to its mid variant, or pass a family
+such as `:ThemeMid gruvbox`. `:ThemeCycle` and `<leader>ty` cycle the configured
+dark, mid, and light defaults. `<leader>tm` applies the current family's mid.
+
+### HEI and HAI
+
+- `:Hei` selects the old-notebook palette: dim beige paper with warm brown
+  surrounding chrome.
+- `:HAI` selects cool chrome/grey with bright electric-blue default text.
+- `:Theme <name>` selects any Base46 or custom theme for the current session.
+
+Set `NVIM_THEME=hei` or `NVIM_THEME=hai` to start in either custom theme.
 
 ### Other Settings
 - **NvDash**: Disabled on startup (`load_on_startup = false`)
-- **Theme Toggle**: Switch between dark and light themes
+- **Theme Toggle**: Base46's button switches dark/light; `:ThemeCycle` includes mid
 
 Location: `lua/chadrc.lua`
 

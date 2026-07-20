@@ -5,6 +5,8 @@ local map = vim.keymap.set
 map("n", ";", ":", { desc = "CMD enter command mode" })
 map("i", "jk", "<ESC>")
 map("n", "<leader>tt", "<cmd>terminal<CR>", { desc = "Open Terminal" })
+map("n", "<leader>tm", "<cmd>ThemeMid<CR>", { desc = "Use current theme family's mid variant" })
+map("n", "<leader>ty", "<cmd>ThemeCycle<CR>", { desc = "Cycle dark, mid, and light themes" })
 map("n", "<A-n>", "<cmd>ToggleNvtop<CR>", { desc = "Toggle nvtop panel" })
 map("n", "<C-h>", "<cmd> TmuxNavigateLeft<CR>", { desc = "Window Left" })
 map("n", "<C-l>", "<cmd> TmuxNavigateRight<CR>", { desc = "Window Right" })
