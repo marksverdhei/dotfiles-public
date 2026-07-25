@@ -19,7 +19,13 @@ add_to_path "$HOME/.cargo/bin"
 add_to_path "$HOME/go/bin"
 add_to_path "$DOTFILES/bin"
 add_to_path "$DOTFILES_PRIVATE/bin"
-add_to_path "$HOME/ht/agent-tools/bin"
+# agent-tools migrated to the XDG data dir on HaiOS; ~/ht/agent-tools is a
+# compat symlink for now. Prefer the canonical path, fall back to the old one.
+if [[ -d "$HOME/.local/share/hai-os/agent-tools/bin" ]]; then
+  add_to_path "$HOME/.local/share/hai-os/agent-tools/bin"
+else
+  add_to_path "$HOME/ht/agent-tools/bin"
+fi
 
 if cmd_exists nvidia-smi; then
   export CUDA_VERSION=$(nvidia-smi --version | tail -n 1 | grep -o -E "[0-9]+\.[0-9]+")
