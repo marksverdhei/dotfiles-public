@@ -16,8 +16,8 @@ os_bg = "#464646"
 session_bg = "#7aa2f7"
 git_bg = "#ffffd6"
 python_bg = "#d6ffd6"
-status_fg = "#81ff91"
-status_err = "#ff3030"
+status_fg = "#22d3ee"
+status_err = "#ff9e3b"
 path_bg = "#4a6a4a"
 
 [hostname]
