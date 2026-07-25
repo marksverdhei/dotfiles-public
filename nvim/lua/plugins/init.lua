@@ -63,6 +63,11 @@ return {
     ---@type avante.Config
     opts = {
       provider = "openrouter",
+      -- Use dressing (a dep below) for prompts; the native input provider
+      -- can't do concealed input, so the API-key login prompt errors without this.
+      input = {
+        provider = "dressing",
+      },
       providers = {
         -- OpenRouter - use :OpenRouterModels to dynamically switch models
         openrouter = {
