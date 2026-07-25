@@ -7,6 +7,43 @@ is_omarchy() {
   [[ "$ID" == "arch" || " $ID $ID_LIKE " == *arch* ]] && command -v hyprctl &>/dev/null
 }
 
+# Omarchy's theme templating helpers import Jinja2 from the system Python.
+# Keep fresh installs and post-update reboots self-healing without reinstalling
+# the package on every bootstrap run.
+ensure_omarchy_jinja2() {
+  is_omarchy || return 0
+
+  if python -c 'import jinja2' &>/dev/null; then
+    return 0
+  fi
+
+  if command -v omarchy &>/dev/null; then
+    spin "Installing Python Jinja2" omarchy pkg add python-jinja
+  else
+    warn "Jinja2 missing (install the python-jinja package)"
+    return 1
+  fi
+}
+
+ensure_omarchy_jinja2
+
+# Shared screenshot bindings call Hyprshot directly. The package pulls in
+# grim, slurp, jq, libnotify, and wl-clipboard, so guarding the top-level tool
+# keeps the complete capture stack available on fresh desktop installs.
+ensure_omarchy_hyprshot() {
+  is_omarchy || return 0
+  command -v hyprshot &>/dev/null && return 0
+
+  if command -v omarchy &>/dev/null; then
+    spin "Installing Hyprshot" omarchy pkg add hyprshot
+  else
+    warn "Hyprshot missing (install the hyprshot package)"
+    return 1
+  fi
+}
+
+ensure_omarchy_hyprshot
+
 section "Shell"
 
 if is_omarchy; then
