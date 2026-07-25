@@ -43,9 +43,14 @@ done
 
 [[ -z $URL ]] && { echo "error: <url> required" >&2; usage 2; }
 
-for cmd in yt-dlp ffmpeg subsctl; do
+for cmd in yt-dlp ffmpeg; do
   command -v "$cmd" >/dev/null || { echo "missing: $cmd" >&2; exit 1; }
 done
+
+# Resolve subsctl: dotfiles/private first, then PATH
+SUBSCTL="$HOME/dotfiles/private/subsync/subsctl"
+[[ -x $SUBSCTL ]] || SUBSCTL=$(command -v subsctl 2>/dev/null || true)
+[[ -x $SUBSCTL ]] || { echo "missing: subsctl" >&2; exit 1; }
 
 VIDEOS_DIR="$HOME/Videos/Backgrounds"
 ICONS_DIR="$HOME/.local/share/icons/bg-videos"
@@ -96,8 +101,8 @@ fi
 cat >"$DESKTOP_PATH" <<DESKTOP
 [Desktop Entry]
 Name=BG ${CATEGORY^}: ${NAME}
-Comment=Set ${NAME} as background video (subsctl bg)
-Exec=$HOME/.local/bin/subsctl bg "${VIDEO_PATH}"
+Comment=Set ${NAME} as background video with audio (subsctl bg)
+Exec=bash -c '${SUBSCTL} bg "${VIDEO_PATH}" && sleep 0.5 && pkill -x swaybg 2>/dev/null; true'
 Icon=${ICON_PATH}
 Terminal=false
 Type=Application
@@ -109,5 +114,7 @@ update-desktop-database "$APPS_DIR" 2>/dev/null || true
 echo "registered: $DESKTOP_PATH"
 
 if (( SET_NOW )); then
-  subsctl bg "$VIDEO_PATH"
+  "$SUBSCTL" bg "$VIDEO_PATH"
+  sleep 0.5
+  pkill -x swaybg 2>/dev/null || true
 fi
