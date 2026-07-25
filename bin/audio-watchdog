@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# audio-watchdog — self-heal a wedged PipeWire stack.
+#
+# centurion's pipewire (1.6.7, HAIos pre-release) intermittently stops
+# answering clients: daemons show "active", sockets accept, but every
+# pactl/pw-cli call hangs forever (main loop idle in epoll; hang sits in
+# the client-registration path). Struck 3x on 2026-07-17 alone.
+# See wiki: centurion/incidents/2026-07-17-pipewire-wedge-watchdog.md
+#
+# Probe: a healthy stack answers `pactl info` in milliseconds. 3s of
+# silence = wedged -> bounce wireplumber/pipewire/pipewire-pulse (+
+# speaker-service, which holds a client connection say depends on).
+# Runs from audio-watchdog.timer every 30s; journal tag: audio-watchdog.
+
+# pipewire 1.6.7's rt module self-lowers RLIMIT_RTTIME to 0 when rtkit is
+# active -> kernel SIGKILLs any RT thread caught running (wireplumber kill-loop
+# storm, 2026-07-17 evening). The process lowered its own HARD limit, so only
+# root can undo it; re-apply after every stack (re)start.
+for p in $(pidof wireplumber pipewire pipewire-pulse); do
+    if prlimit -p "$p" 2>/dev/null | grep -q 'RTTIME.*  *0  *0'; then
+        sudo -n prlimit --rttime=unlimited -p "$p" 2>/dev/null \
+            && logger -t audio-watchdog "raised RTTIME 0->unlimited on pid $p"
+    fi
+done
+
+if timeout 3 pactl info >/dev/null 2>&1; then
+    exit 0
+fi
+
+logger -t audio-watchdog "pactl unresponsive for 3s - restarting pipewire stack"
+systemctl --user restart wireplumber pipewire pipewire-pulse
+sleep 2
+systemctl --user try-restart speaker-service 2>/dev/null
+
+if timeout 3 pactl info >/dev/null 2>&1; then
+    logger -t audio-watchdog "recovered"
+else
+    logger -t audio-watchdog "STILL unresponsive after restart - manual attention needed"
+fi
+
+# Stack restarts crash bluetoothd (SIGABRT on live A2DP teardown) and the
+# Marshall Kilburn desk speaker - the usual default sink - doesn't always
+# re-pair on its own. Only attempted here, after a recovery, so we never
+# fight an intentional disconnect during normal operation.
+KILBURN="04:FE:A1:71:E5:CB"
+sleep 2
+if timeout 5 bluetoothctl info "$KILBURN" 2>/dev/null | grep -q 'Connected: no'; then
+    timeout 10 bluetoothctl connect "$KILBURN" >/dev/null 2>&1 \
+        && logger -t audio-watchdog "reconnected Kilburn BT speaker"
+fi
