@@ -38,6 +38,16 @@ case "$COLOR" in
   *)   BRIGHT="bright$COLOR" ;;
 esac
 
+# Segment background for status-left/right chips: themes may override the
+# default (black) by shipping a tmux-status-bg.hex in the active theme dir.
+SEG_BG="black"
+if [ -f "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" ]; then
+  seg="$(head -1 "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" | tr -d '[:space:]')"
+  case "$seg" in
+    \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) SEG_BG="$seg" ;;
+  esac
+fi
+
 $T set -g status-bg default
 $T set -g status-style "bg=default,fg=default"
 
@@ -52,7 +62,7 @@ $T setw -g clock-mode-colour "$COLOR"
 $T set -gu status-format
 
 # Left: session name + active pane ID in black bg
-$T set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
+$T set -g status-left "#[bg=$SEG_BG,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
 $T set -g status-left-length 40
 
 # Right: fill line + hostname
@@ -62,7 +72,7 @@ CONTINUUM_HOOK=""
 if [ -x "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh" ]; then
   CONTINUUM_HOOK="#($HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
 fi
-$T set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+$T set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=$SEG_BG,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
 $T set -g status-right-length 40
 
 $T set -g status-justify left
@@ -96,5 +106,5 @@ if [ "$(tmux show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
   # with spaces, so the comparison silently fails. Strip the leading `%`
   # from pane_id via #{s/^%//:pane_id} and strip `%` (and newline) from
   # the holder file output with `tr -d "%\n"`.
-  tmux set -g pane-border-format "#[bg=black] #{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},#[fg=red#,bold]❤ #[bg=black],}#{?#{==:#{s/^%//:pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null | tr -d '%\\n')},#[fg=yellow#,bold]🎤 STICK ─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}},#{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}}} #[bg=default,fg=default]"
+  tmux set -g pane-border-format "#[bg=$SEG_BG] #{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},#[fg=red#,bold]❤ #[bg=$SEG_BG],}#{?#{==:#{s/^%//:pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null | tr -d '%\\n')},#[fg=yellow#,bold]🎤 STICK ─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}},#{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}}} #[bg=default,fg=default]"
 fi

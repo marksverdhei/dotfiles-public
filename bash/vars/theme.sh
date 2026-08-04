@@ -4,7 +4,12 @@ else
   export SYS_THEME="dark"
 fi
 
-export THEME="catppuccin"
+# Follow the active Omarchy theme; fall back to catppuccin off-Omarchy.
+if [ -f "$HOME/.config/omarchy/current/theme.name" ]; then
+  export THEME="$(cat "$HOME/.config/omarchy/current/theme.name")"
+else
+  export THEME="catppuccin"
+fi
 
 export GHOSTTY_THEME_DIR="/snap/ghostty/current/share/ghostty/themes"
 export GHOSTTY_THEME=$THEME
