@@ -19,8 +19,13 @@ add_to_path "$HOME/.cargo/bin"
 add_to_path "$HOME/go/bin"
 add_to_path "$DOTFILES/bin"
 add_to_path "$DOTFILES_PRIVATE/bin"
-# agent-tools migrated to the XDG data dir on HaiOS; ~/ht/agent-tools is a
-# compat symlink for now. Prefer the canonical path, fall back to the old one.
+# agent-tools migrated to the XDG data dir on HAIos (hai-os#292, 2026-07-28).
+# ~/ht/agent-tools was NEVER a compat symlink here — it was an empty directory,
+# and big-dog removed it 2026-08-08. The else-branch below is therefore
+# vestigial: it adds a path that does not exist. Kept because a bare
+# add_to_path on a missing dir is harmless, and because deleting it would hide
+# the one real hazard — anything that re-creates ~/ht/agent-tools/bin flips
+# hai-os-setup.sh:1313 back to the archived prefix.
 if [[ -d "$HOME/.local/share/hai-os/agent-tools/bin" ]]; then
   add_to_path "$HOME/.local/share/hai-os/agent-tools/bin"
 else
