@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# portal-watchdog — self-heal xdg-desktop-portal-hyprland screencast wedge.
+#
+# xdph leaks ScreenCast sessions: one Discord/Chromium "Go Live" spawns many
+# sessions (all persist_mode 0), and on a long-lived xdph their teardown fails
+# with "Failed to close session implementation: Timeout was reached" in the
+# portal FRONTEND's journal (2026-08-08: 11 timeouts in one 7-min window on a
+# 6h55m-old xdph; its toplevel lock counter climbed 1->4->5 and never came
+# back). Screen pickers then wedge until BOTH portal services restart. The
+# leak mechanism is untouched upstream; this watchdog clears the wedge.
+#
+# Detection: new frontend journal lines with the close-timeout signature,
+# tracked via a journal cursor so old incidents never re-trigger.
+# Safety: never restarts while a screencast node is running — killing a live
+# stream is worse than the wedge. Wedged AND streaming -> log, retry next tick.
+# Runs from portal-watchdog.timer every 60s; journal tag: portal-watchdog.
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/portal-watchdog"
+CURSOR="$STATE_DIR/journal.cursor"
+SIG="Failed to close session implementation"
+mkdir -p "$STATE_DIR"
+
+# First run: swallow history up to the newest entry, act only on later lines.
+if [[ ! -f "$CURSOR" ]]; then
+    journalctl --user -u xdg-desktop-portal.service -n 1 -o cat \
+        --cursor-file="$CURSOR" >/dev/null 2>&1
+    logger -t portal-watchdog "cursor initialized"
+    exit 0
+fi
+
+hits=$(journalctl --user -u xdg-desktop-portal.service -o cat \
+        --cursor-file="$CURSOR" 2>/dev/null | grep -c "$SIG")
+[[ "$hits" -eq 0 ]] && exit 0
+
+# Anything that looks like a live screencast producer? (Cameras are v4l2 and
+# excluded; this box has none anyway.) pw-dump unparsable -> assume live.
+live=$(pw-dump 2>/dev/null | python3 -c '
+import json, sys
+try:
+    objs = json.load(sys.stdin)
+except Exception:
+    print(1); raise SystemExit
+n = 0
+for o in objs:
+    info = o.get("info") or {}
+    props = info.get("props") or {}
+    mc = (props.get("media.class") or "").lower()
+    name = ((props.get("node.name") or "") + " " +
+            (props.get("node.description") or "")).lower()
+    if info.get("state") == "running" and "v4l2" not in name \
+       and ("video/source" in mc or "xdph" in name or "screencast" in name):
+        n += 1
+print(n)')
+
+if [[ "$live" != "0" ]]; then
+    logger -t portal-watchdog "leak signature x$hits but $live live screencast node(s) — deferring restart"
+    exit 0
+fi
+
+logger -t portal-watchdog "xdph session-close timeouts x$hits, no live stream — restarting portal services"
+systemctl --user restart xdg-desktop-portal-hyprland xdg-desktop-portal
+sleep 2
+if systemctl --user is-active -q xdg-desktop-portal xdg-desktop-portal-hyprland; then
+    logger -t portal-watchdog "recovered — portals restarted clean"
+else
+    logger -t portal-watchdog "portal restart did NOT come back clean — manual attention needed"
+fi
