@@ -50,11 +50,23 @@ slink() {
         fi
     fi
 
-    # Back up existing regular files/dirs (not symlinks) before overwriting
+    # Back up existing regular files/dirs (not symlinks) before overwriting.
+    #
+    # Only warn if the move actually happened. It does NOT always happen, and
+    # that is by design: callers may pass a directory link_name with a trailing
+    # slash (e.g. `slink "$P/ghostty" "$HOME/.config/"`), relying on `ln -s`
+    # putting the link *inside* that directory. For those, $backup lands under
+    # $link_name itself and mv correctly refuses — "cannot move to a
+    # subdirectory of itself". Reporting a backup there is a false success.
+    #
+    # Do NOT "fix" this by stripping the trailing slash. That would make the mv
+    # succeed and quietly relocate the caller's whole ~/.config. The slash is
+    # load-bearing.
     if [[ -e "$link_name" && ! -L "$link_name" ]]; then
         local backup="${link_name}.bak.$(date +%s)"
-        mv "$link_name" "$backup"
-        warn "slink: backed up $link_name → $backup"
+        if mv "$link_name" "$backup" 2>/dev/null; then
+            warn "slink: backed up $link_name → $backup"
+        fi
     fi
 
     ln -sfn "$target" "$link_name"
