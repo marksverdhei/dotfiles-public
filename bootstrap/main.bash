@@ -44,6 +44,8 @@ ensure_omarchy_hyprshot() {
 
 ensure_omarchy_hyprshot
 
+. "$DOTFILES/bootstrap/ears.bash"
+
 section "Shell"
 
 if is_omarchy; then
@@ -141,7 +143,7 @@ if is_omarchy; then
       sudo ln -sfn "$DOTFILES/keyd/default.conf" /etc/keyd/default.conf
       sudo systemctl enable --now keyd &>/dev/null
       sudo keyd reload &>/dev/null || true
-      ok "keyd remaps active (escape→f14)"
+      ok "keyd remaps active (Escape tap→F14, hold→F15; Wooting excluded)"
     else
       warn "keyd installed but no passwordless sudo — link /etc/keyd/default.conf manually"
     fi

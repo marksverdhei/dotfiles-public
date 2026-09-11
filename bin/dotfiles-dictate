@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-toggle}"
+case "$action" in
+  toggle|vad) ;;
+  *) printf 'Usage: dotfiles-dictate [toggle|vad]\n' >&2; exit 2 ;;
+esac
+
+# Optional machine-owned wrapper (for example, start a local ASR service).
+if [[ -x "$HOME/.local/bin/ears-dictate" ]]; then
+  exec "$HOME/.local/bin/ears-dictate" "$action"
+fi
+
+# Hyprland may not inherit the interactive shell's PATH.
+for ears_bin in "$HOME/.local/bin/ears" "$HOME/.cargo/bin/ears"; do
+  [[ ! -x "$ears_bin" ]] || exec "$ears_bin" "$action"
+done
+if command -v ears &>/dev/null; then
+  exec ears "$action"
+fi
+printf 'ears is missing; rerun dotfiles bootstrap to install it.\n' >&2
+exit 127

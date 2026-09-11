@@ -92,6 +92,28 @@ On Omarchy (Arch + Hyprland), the private bootstrap additionally:
 - Symlinks hyprshade screen filter shaders from the `aether` package
 - Sets up vibe audio visualizer, ears ASR, and desktop apps
 
+## Dictation
+
+On Omarchy desktops, bootstrap installs the public
+[ears](https://github.com/heiervang-technologies/ears) client (pinned to v1.1.144,
+SHA-256 verified, Linux x86_64) and installs `wtype` if needed. Existing ears
+installations and configuration are preserved. Set `DOTFILES_NO_EARS=1` to skip
+this bootstrap step. Other architectures can build ears from source.
+
+Configure an ASR backend with `ears server URL`, select your microphone in ears,
+and run `ears test`. The client needs PipeWire audio and a running local or remote
+ASR endpoint; bootstrap does not install a model or inference server. Keep backend
+URLs, credentials, and profiles in your local `~/.config/ears/` configuration.
+
+F14 toggles dictation; F15 toggles hands-free VAD. keyd maps physical Escape tap/hold
+to these keys on ordinary keyboards. The Wooting is excluded from keyd so its
+firmware profile can emit the same keys directly. Setup-specific bindings can
+override these in `~/.config/hypr/machine.conf` (unbind the shared keycodes first).
+
+The shared `bin/dotfiles-dictate` launcher uses an executable
+`~/.local/bin/ears-dictate` when present, allowing machine-specific server startup.
+Otherwise it calls ears directly. Existing local wrappers are never overwritten.
+
 ## Validation
 
 Run `dotfiles-check` to validate installation (checks broken symlinks, missing deps).
