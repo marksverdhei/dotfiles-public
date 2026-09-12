@@ -1,0 +1,4 @@
+#!/bin/bash
+# Theme colours do not revoke temporary/released wallpaper ownership.
+export OMARCHY_THEME_SKIP_BACKGROUND=1
+exec "$HOME/.local/share/omarchy/bin/omarchy-theme-set" "$@"

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Route wallpaper operations to the controller; preserve Omarchy's other routes.
+case "$1 $2 $3" in
+  'theme bg set') shift 3; exec omarchy-theme-bg-set "$@" ;;
+  'theme bg next') shift 3; exec omarchy-theme-bg-next "$@" ;;
+esac
+if [[ $1 == theme && $2 == set ]]; then
+  export OMARCHY_THEME_SKIP_BACKGROUND=1
+fi
+exec "$HOME/.local/share/omarchy/bin/omarchy" "$@"
