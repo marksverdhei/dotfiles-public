@@ -20,7 +20,8 @@ tmux_select() {
   if [ "$count" -eq 0 ]; then
     tmux new-session
   elif [ "$count" -eq 1 ]; then
-    "${attach_cmd[@]}" "${sessions[0]}"
+    # The trailing colon makes dots literal parts of the session name.
+    "${attach_cmd[@]}" "=${sessions[0]}:"
   else
     # Pick with fzf if present; otherwise use a simple PS3/select menu
     if command -v fzf >/dev/null 2>&1; then
@@ -29,7 +30,7 @@ tmux_select() {
       echo "Select a tmux session:"
       select s in "${sessions[@]}"; do [ -n "$s" ] && choice="$s" && break; done
     fi
-    [ -n "$choice" ] && "${attach_cmd[@]}" "$choice"
+    [ -n "$choice" ] && "${attach_cmd[@]}" "=$choice:"
   fi
 }
 

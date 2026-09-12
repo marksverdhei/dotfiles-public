@@ -2,6 +2,7 @@ mp4_to_mp3() {
   ffmpeg -i $1 $(echo $1 | sed s/\.mp4/.mp3/g)
 }
 
+#reverse
 mp4_rev() {
   if [[ -z $1 ]]; then
     printf "Usage: reverse_mp4 <video.mp4>\n" >&2
@@ -19,9 +20,10 @@ mp4_rev() {
          "$out"
 }
 
+#split on mark
 mp4_cut() {
   if [[ $# -ne 2 ]]; then
-    printf "Usage: cut_mp4 <video.mp4> <ss | mm:ss | hh:mm:ss>\n" >&2
+    printf "Usage: cut_mp4 <video.mp4> <ss[.frac] | mm:ss[.frac] | hh:mm:ss[.frac]>\n" >&2
     return 1
   fi
 
@@ -30,8 +32,8 @@ mp4_cut() {
 
   [[ ! -f $in ]] && { printf "File not found: %s\n" "$in" >&2; return 1; }
 
-  if [[ ! $mark =~ ^[0-9]+$ && ! $mark =~ ^([0-9]{1,}:){1,2}[0-5]?[0-9]$ ]]; then
-    printf "Invalid time \"%s\" – use seconds or mm:ss (or hh:mm:ss)\n" "$mark" >&2
+  if [[ ! $mark =~ ^[0-9]+(\.[0-9]+)?$ && ! $mark =~ ^([0-9]{1,}:){1,2}[0-5]?[0-9](\.[0-9]+)?$ ]]; then
+    printf "Invalid time \"%s\" – use seconds or mm:ss (or hh:mm:ss), fractions allowed (e.g. 12.5, 1:23.45)\n" "$mark" >&2
     return 1
   fi
 
@@ -44,6 +46,7 @@ mp4_cut() {
   ffmpeg -y -ss "$mark" -i "$in" -c copy "$back"
 }
 
+#concat
 mp4_con() {
   # ---- argument checks ------------------------------------------------------
   if [[ $# -lt 2 || $# -gt 3 ]]; then
