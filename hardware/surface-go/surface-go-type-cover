@@ -1,0 +1,51 @@
+#!/bin/bash
+# Surface Go 2 Type Cover (045e:09b5): avoid usbhid suspend I/O errors.
+# Release only this cover's interfaces before sleep; restore them on resume
+# or after a failed sleep attempt. Power-button wake is unaffected.
+set -u
+shopt -s nullglob
+
+state_dir=/run/surface-go-type-cover-sleep
+driver=/sys/bus/usb/drivers/usbhid
+
+restore_cover() {
+    [[ -f "$state_dir/interfaces" ]] || return 0
+    while IFS= read -r interface; do
+        [[ "$interface" =~ ^[0-9]+-[0-9]+(\.[0-9]+)*:[0-9]+\.[0-9]+$ ]] || continue
+        [[ -d "/sys/bus/usb/devices/$interface" ]] || continue
+        [[ -L "/sys/bus/usb/devices/$interface/driver" ]] && continue
+        if ! printf '%s' "$interface" > "$driver/bind"; then
+            printf 'Surface cover: failed to restore %s\n' "$interface" >&2
+            return 1
+        fi
+    done < "$state_dir/interfaces"
+    rm -f "$state_dir/interfaces"
+    rmdir "$state_dir"
+}
+
+case "${1:-}" in
+    pre)
+        [[ "${2:-}" == suspend ]] || exit 0
+        restore_cover || exit 1
+        install -d -m 0700 "$state_dir"
+        : > "$state_dir/interfaces"
+        for device in /sys/bus/usb/devices/*; do
+            [[ -f "$device/idVendor" && -f "$device/idProduct" ]] || continue
+            [[ $(< "$device/idVendor") == 045e && $(< "$device/idProduct") == 09b5 ]] || continue
+            for interface in "$device":*; do
+                [[ -L "$interface/driver" ]] || continue
+                [[ $(readlink -f "$interface/driver") == "$driver" ]] || continue
+                name=${interface##*/}
+                printf '%s\n' "$name" >> "$state_dir/interfaces"
+                if ! printf '%s' "$name" > "$driver/unbind"; then
+                    printf 'Surface cover: failed to release %s\n' "$name" >&2
+                    restore_cover
+                    exit 1
+                fi
+            done
+        done
+        ;;
+    post)
+        restore_cover
+        ;;
+esac

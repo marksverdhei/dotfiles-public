@@ -92,6 +92,12 @@ On Omarchy (Arch + Hyprland), the private bootstrap additionally:
 - Symlinks hyprshade screen filter shaders from the `aether` package
 - Sets up vibe audio visualizer, ears ASR, and desktop apps
 
+## Optional hardware profiles
+
+- [Surface Go 2 suspend](hardware/surface-go/README.md): opt-in power-button sleep,
+  resume without automatic locking, and an experimental Type Cover workaround.
+  Not installed by bootstrap; full sleep/wake validation is still pending.
+
 ## Validation
 
 Run `dotfiles-check` to validate installation (checks broken symlinks, missing deps).
