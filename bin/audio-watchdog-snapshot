@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Capture daemon state before recovery without recording client arguments."""
+import concurrent.futures
+import datetime
+import json
+import os
+from pathlib import Path
+import subprocess
+import signal
+
+
+def run(command, timeout=2):
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        timed_out = False
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            os.killpg(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+        return {"returncode": process.returncode, "timeout": timed_out,
+                "stdout": stdout.decode(errors="replace"),
+                "stderr": stderr.decode(errors="replace")}
+    except OSError as error:
+        return {"error": str(error)}
+
+
+def capture(unit, folder):
+    result = run(["systemctl", "--user", "show", unit, "-p", "MainPID", "--value"])
+    pid = result.get("stdout", "").strip()
+    if not pid.isdecimal() or pid == "0":
+        return
+    state = {"pid": int(pid)}
+    for name in ("status", "wchan", "limits"):
+        try:
+            state[name] = Path("/proc", pid, name).read_text()
+        except OSError as error:
+            state[name] = str(error)
+    (folder / (unit + ".state.json")).write_text(json.dumps(state, indent=2))
+    result = run(["sudo", "-n", "gdb", "-nx", "-nh", "-batch",
+                  "-ex", "set auto-load off", "-ex", "set debuginfod enabled off",
+                  "-ex", "set print frame-arguments none",
+                  "-ex", "thread apply all bt 24", "-ex", "detach", "-p", pid], 5)
+    (folder / (unit + ".backtrace.json")).write_text(json.dumps(result, indent=2))
+
+
+def main():
+    os.umask(0o077)
+    root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "audio-watchdog"
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    folder = root / (datetime.datetime.now().strftime("%Y%m%dT%H%M%S") + "-" + str(os.getpid()))
+    folder.mkdir(mode=0o700)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(lambda unit: capture(unit, folder),
+                      ("pipewire", "pipewire-pulse", "wireplumber")))
+
+
+if __name__ == "__main__":
+    main()

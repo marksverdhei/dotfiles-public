@@ -27,24 +27,31 @@ if timeout 3 pactl info >/dev/null 2>&1; then
     exit 0
 fi
 
-logger -t audio-watchdog "pactl unresponsive for 3s - restarting pipewire stack"
+# Confirm the failure before disrupting active playback.
+if timeout 3 pactl info >/dev/null 2>&1; then
+    exit 0
+fi
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+timeout 8 "$script_dir/audio-watchdog-snapshot" 2>/dev/null || true
+logger -t audio-watchdog "pactl unresponsive on two probes - restarting pipewire stack"
 systemctl --user restart wireplumber pipewire pipewire-pulse
 sleep 2
 systemctl --user try-restart speaker-service 2>/dev/null
 
 if timeout 3 pactl info >/dev/null 2>&1; then
     logger -t audio-watchdog "recovered"
+    recovery_status=0
 else
     logger -t audio-watchdog "STILL unresponsive after restart - manual attention needed"
+    recovery_status=1
 fi
 
-# Stack restarts crash bluetoothd (SIGABRT on live A2DP teardown) and the
-# Marshall Kilburn desk speaker - the usual default sink - doesn't always
-# re-pair on its own. Only attempted here, after a recovery, so we never
-# fight an intentional disconnect during normal operation.
-KILBURN="04:FE:A1:71:E5:CB"
-sleep 2
-if timeout 5 bluetoothctl info "$KILBURN" 2>/dev/null | grep -q 'Connected: no'; then
-    timeout 10 bluetoothctl connect "$KILBURN" >/dev/null 2>&1 \
-        && logger -t audio-watchdog "reconnected Kilburn BT speaker"
+# Reconnect only an explicitly configured device after successful recovery.
+if [[ "$recovery_status" == 0 && -n "${AUDIO_WATCHDOG_BLUETOOTH_DEVICE:-}" ]]; then
+    if timeout 5 bluetoothctl info "$AUDIO_WATCHDOG_BLUETOOTH_DEVICE" 2>/dev/null | grep -q 'Connected: no'; then
+        timeout 10 bluetoothctl connect "$AUDIO_WATCHDOG_BLUETOOTH_DEVICE" >/dev/null 2>&1 \
+            && logger -t audio-watchdog "reconnected configured Bluetooth device"
+    fi
 fi
+exit "$recovery_status"
