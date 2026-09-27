@@ -102,7 +102,7 @@ cat >"$DESKTOP_PATH" <<DESKTOP
 [Desktop Entry]
 Name=BG ${CATEGORY^}: ${NAME}
 Comment=Set ${NAME} as background video with audio (subsctl bg)
-Exec=bash -c '${SUBSCTL} bg "${VIDEO_PATH}" && sleep 0.5 && pkill -x swaybg 2>/dev/null; true'
+Exec=bash -c '${SUBSCTL} bg "${VIDEO_PATH}"'
 Icon=${ICON_PATH}
 Terminal=false
 Type=Application
@@ -116,5 +116,5 @@ echo "registered: $DESKTOP_PATH"
 if (( SET_NOW )); then
   "$SUBSCTL" bg "$VIDEO_PATH"
   sleep 0.5
-  pkill -x swaybg 2>/dev/null || true
+  # subsctl owns the explicit controller handoff.
 fi
