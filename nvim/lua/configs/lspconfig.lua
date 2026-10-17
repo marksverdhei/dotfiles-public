@@ -12,6 +12,7 @@ local servers = {
   cssls = "vscode-css-language-server",
   pyright = "pyright-langserver",
   marksman = "marksman",
+  wgsl_analyzer = "wgsl-analyzer",
 }
 
 local enabled = {}
