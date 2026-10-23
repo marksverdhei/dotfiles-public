@@ -20,4 +20,4 @@ export MODELS="$HOME/Models"
 export GGUFS="$HOME/Models/llama.cpp"
 
 unset CLAUDE_CONFIG_DIR
-export UNLEASH_DIR='/home/me/ht/unleash'
+export UNLEASH_DIR='/home/me/public/unleash'

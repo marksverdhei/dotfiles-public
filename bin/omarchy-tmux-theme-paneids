@@ -21,8 +21,8 @@ tmux set -gu status-format
 tmux set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
 tmux set -g status-left-length 40
 
-# Right: hostname
-tmux set -g status-right "#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+# Right: state indicators plus hostname.
+tmux set -g status-right "#[fg=$COLOR]#{?pane_in_mode,COPY ,}#{?client_prefix,PREFIX ,}#{?window_zoomed_flag,ZOOM ,}── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
 tmux set -g status-right-length 40
 
 tmux set -g status-justify left
@@ -31,8 +31,8 @@ tmux set -g status-justify left
 tmux set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
 tmux set -g window-status-separator ""
 
-# Active window: bright blue bold, with pane ID and process suffix
-tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
+# Active window: host accent, with pane ID and process suffix.
+tmux set -g window-status-current-format "#[fg=$COLOR,bold]#I:#{pane_id} #W#[fg=$COLOR]#{?#{==:#W,#{pane_current_command}},,:#[fg=$COLOR]#{=10:pane_current_command}} "
 
 # Pane borders with pane ID
 if tmux show-options -g | grep -q "pane-border-status top"; then

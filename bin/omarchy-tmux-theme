@@ -14,18 +14,23 @@ tmux setw -g clock-mode-colour "$COLOR"
 # Unset status-format to let status-left/right take over
 tmux set -gu status-format
 
-# Left: session name + active pane ID in black bg
+# Left: session name + active pane ID in the host accent.
 tmux set -g status-left "#[bg=black,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
 tmux set -g status-left-length 40
 
-# Right: fill line + hostname
+# Right: Omarchy's state indicators plus the hostname, all in the host accent.
 # Prepend tmux-continuum's save hook so periodic saves still fire after we
 # overwrite status-right (status refresh is what triggers continuum_save.sh).
 CONTINUUM_HOOK=""
-if [ -x "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh" ]; then
-  CONTINUUM_HOOK="#($HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
-fi
-tmux set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
+for CONTINUUM_SCRIPT in \
+  "$HOME/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh" \
+  "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh"; do
+  if [ -x "$CONTINUUM_SCRIPT" ]; then
+    CONTINUUM_HOOK="#($CONTINUUM_SCRIPT)"
+    break
+  fi
+done
+tmux set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]#{?pane_in_mode,COPY ,}#{?client_prefix,PREFIX ,}#{?window_zoomed_flag,ZOOM ,}── #[bg=black,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
 tmux set -g status-right-length 40
 
 tmux set -g status-justify left
@@ -34,8 +39,8 @@ tmux set -g status-justify left
 tmux set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
 tmux set -g window-status-separator ""
 
-# Active window: bright blue bold, with process suffix if different
-tmux set -g window-status-current-format "#[fg=brightblue,bold]#I:#{pane_id} #W#[fg=brightblue]#{?#{==:#W,#{pane_current_command}},,:#[fg=brightblue]#{=10:pane_current_command}} "
+# Active window: host accent, with process suffix if different.
+tmux set -g window-status-current-format "#[fg=$COLOR,bold]#I:#{pane_id} #W#[fg=$COLOR]#{?#{==:#W,#{pane_current_command}},,:#[fg=$COLOR]#{=10:pane_current_command}} "
 
 # Top pane border with black background.
 #

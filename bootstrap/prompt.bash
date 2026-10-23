@@ -30,8 +30,23 @@ if [[ -f "$starship_template" ]]; then
   # ~/.config/starship.toml is a GENERATED file now, not a symlink — drop any
   # stale symlink first so we never write through to a repo file.
   [[ -L "$HOME/.config/starship.toml" ]] && rm -f "$HOME/.config/starship.toml"
-  sed -E "s|^(session_bg[[:space:]]*=[[:space:]]*).*|\\1\"$_accent\"|" \
-    "$starship_template" > "$HOME/.config/starship.toml"
+
+  _starship_out="$HOME/.config/starship.toml"
+  _rendered=false
+  # Make Jinja2 available (installs python-jinja if missing). Preferred render
+  # path is Jinja2 when the template actually uses it ({{ session_bg }});
+  # render_template picks jinja2-cli / j2 / the python module in that order.
+  ensure_jinja || true
+  if grep -q '{{' "$starship_template" && have_jinja; then
+    render_template "$starship_template" "$_starship_out" "session_bg=$_accent" && _rendered=true
+  fi
+  # Fallback: substitute the session_bg line directly. Covers the private base
+  # template (SESSION_COLOR_PLACEHOLDER) and any box without Jinja2 — identical
+  # to the historical behaviour, so nothing regresses.
+  if ! $_rendered; then
+    sed -E "s|^(session_bg[[:space:]]*=[[:space:]]*).*|\\1\"$_accent\"|" \
+      "$starship_template" > "$_starship_out"
+  fi
   ok "Starship → \$HAI_OS_ACCENT ($_accent)"
 else
   warn "No Starship template available"
