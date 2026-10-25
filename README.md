@@ -72,7 +72,8 @@ Key symlinks created by bootstrap:
 - `~/.bashrc.d` → `dotfiles/bash/`
 - `~/.config/nvim` → `dotfiles/nvim/`
 - `~/.config/ghostty` → `dotfiles/ghostty/`
-- `~/.config/starship.toml` → per-host or default starship config
+- `~/.config/starship.toml` is generated, not a symlink: `bootstrap/prompt.bash` renders
+  `starship/starship.toml` (or the private base) with the machine accent as `session_bg`
 
 ## Private Dotfiles
 
@@ -95,3 +96,37 @@ On Omarchy (Arch + Hyprland), the private bootstrap additionally:
 ## Validation
 
 Run `dotfiles-check` to validate installation (checks broken symlinks, missing deps).
+
+## Look
+
+The tmux theme (`bin/omarchy-tmux-theme`) and the Starship prompt
+(`starship/starship.toml`) follow the HAIos design system
+(`heiervang-technologies/design-system`): flat, rounded glass pills, one cyan
+accent, and the host colour shown only as the hostname dot. They are the HAIos
+default look. The prompt template is mirrored in hai-os
+(`overlay/themes/gem/starship.toml`, `containers/haios/terminal/`) and in the
+private base, so change them together.
+
+## Contributing (agents)
+
+Fleet agents work as the GitHub user `marksverdhai`, which has write access
+to this repo:
+
+```bash
+git -C ~/dotfiles fetch origin
+git -C ~/dotfiles worktree add ~/worktrees/<task> -b <branch> origin/main
+# ... commit in ~/worktrees/<task> ...
+git -C ~/worktrees/<task> push -u origin <branch>
+gh pr create -R marksverdhei/dotfiles-public --head <branch>
+# once peer-reviewed:
+gh pr merge <n> -R marksverdhei/dotfiles-public --squash --delete-branch
+```
+
+Never edit or switch branches in `~/dotfiles` itself, because it is the live
+config of the machine. If a push is denied (HTTP 403), the access was revoked
+or the invitation was never accepted. Check it with
+`gh api repos/marksverdhei/dotfiles-public --jq .permissions`. Pending
+invitations are listed by `gh api user/repository_invitations`, and you
+accept one with `gh api -X PATCH user/repository_invitations/<id>`. As a
+fallback, push to the fork (`marksverdhai/dotfiles-public`) and open the PR
+with `--head marksverdhai:<branch>`. The owner then has to merge it.

@@ -1,46 +1,82 @@
+# HAIos prompt — follows ~/ht/design-system (tokens/tokens.json): one glass
+# capsule on the terminal bg, ONE accent (cyan), quiet labels in muted, host
+# identity as a single dot, status = colour PLUS a word.
+#
+#   ╭─( ● centurion │ ~/ht/hai-os │ branch │ venv ) exit N
+#   ╰─❯
 add_newline = true
 command_timeout = 200
 
-# Line 1: OS (Shell if not bash) Hostname Path Branch Python
-# Line 2: ❯
 format = """
-$hostname$directory$git_branch$python
-$character"""
+[╭─](fg:line)${custom.ears_rec}${custom.ears_vad}${custom.ears_busy}\
+[\ue0b6](fg:chip)$hostname$directory$git_branch$python[\ue0b4](fg:chip) $status
+[╰─](fg:line)$character"""
 
-palette = "default"
+palette = "haios"
 
-[palettes.default]
-white = "#f7f7f7"
-black = "#111111"
-os_bg = "#464646"
+[palettes.haios]
+# session_bg = host identity colour (the hostname dot). Generated per machine:
+# bootstrap/prompt.bash substitutes $HAI_OS_ACCENT here, and the hai-os
+# theme-set hook (60-haios-session-accent) rewrites this exact line, so keep
+# its shape: one line, `session_bg = "#rrggbb"`.
 session_bg = "#7aa2f7"
-git_bg = "#ffffd6"
-python_bg = "#d6ffd6"
-status_fg = "#22d3ee"
-status_err = "#ff9e3b"
-path_bg = "#4a6a4a"
+bg = "#03070c"
+chip = "#0e2633"
+line = "#135464"
+cyan = "#22d3ee"
+ink = "#e6f7fb"
+muted = "#8fb8c4"
+faint = "#6f95a1"
+ember = "#ff9e1f"
+ok = "#4ade80"
+warn = "#fbbf24"
+bad = "#f87171"
 
 [hostname]
 disabled = false
 ssh_only = false
-format = "[ $hostname ](bg:session_bg fg:black)"
+format = "[●](bg:chip fg:session_bg)[ $hostname](bg:chip fg:ink)"
+
+[directory]
+truncation_length = 0
+truncate_to_repo = false
+read_only = " ro"
+format = "[ │ ](bg:chip fg:line)[$path](bg:chip fg:cyan bold)[$read_only](bg:chip fg:warn)"
 
 [git_branch]
-format = "[ \ue0a0 $branch ](bg:git_bg fg:black)"
+format = "[ │ ](bg:chip fg:line)[\ue0a0 $branch](bg:chip fg:muted)"
 
 [git_status]
 disabled = true
 
 [python]
-format = "[ \ue606 $virtualenv ](bg:python_bg fg:black)"
+format = "[ │ ](bg:chip fg:line)[\ue606 $virtualenv](bg:chip fg:muted)"
 detect_extensions = []
 detect_files = []
 
-[directory]
-truncation_length = 0
-truncate_to_repo = false
-format = "[ $path ](bg:path_bg fg:white)"
+[status]
+disabled = false
+format = "[exit $status](fg:ember)"
 
 [character]
-success_symbol = "[❯](status_fg)"
-error_symbol = "[❯](status_err)"
+success_symbol = "[❯](fg:cyan bold)"
+error_symbol = "[❯](fg:ember bold)"
+vimcmd_symbol = "[❮](fg:cyan bold)"
+
+# ears (speech-to-text) state: shown only while recording, transcribing or in
+# VAD mode. `ears prompt` prints nothing when idle or when ears isn't
+# installed, which hides the segment. Updates each time a prompt is drawn.
+[custom.ears_rec]
+command = "ears prompt --state recording"
+when = true
+format = "([\ue0b6](fg:bad)[$output](bg:bad fg:bg bold)[\ue0b4](fg:bad) )"
+
+[custom.ears_vad]
+command = "ears prompt --state vad"
+when = true
+format = "([\ue0b6](fg:cyan)[$output](bg:cyan fg:bg bold)[\ue0b4](fg:cyan) )"
+
+[custom.ears_busy]
+command = "ears prompt --state transcribing"
+when = true
+format = "([\ue0b6](fg:warn)[$output](bg:warn fg:bg bold)[\ue0b4](fg:warn) )"

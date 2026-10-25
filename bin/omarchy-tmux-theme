@@ -1,110 +1,151 @@
 #!/bin/bash
-# Per-host tmux accent. Resolution order:
-#   1. explicit host entry in ~/dotfiles/private/tmux/colors.json (curated)
-#   2. HaiOS fleet accent, ~/.config/hai-os/accent.env — gems and the kata
-#      dev VMs (pilgrim, …) seed this from the hai-os accent map at start;
-#      it's the only source on public-only-dotfiles boxes
-#   3. plain blue
-# A session accent (active theme's accent, ~/.config/hai-os/session-accent.env)
-# OVERRIDES all of the above while a theme carries one — theming is temporary,
-# the canonical host accent stays untouched (hai-os #237).
+# HAIos tmux theme — follows ~/ht/design-system (tokens/tokens.json):
+# flat near-black, ONE accent (cyan #22d3ee), tinted "glass" chips with
+# rounded caps, status = colour PLUS a word, no emoji icons.
+#
+# Two colours are resolved:
+#   ACCENT  page chrome (borders, active window, session chip). HAIos cyan,
+#           unless the ACTIVE THEME carries its own accent
+#           (~/.config/hai-os/session-accent.env, SESSION_ACCENT_SOURCE=theme,
+#           hai-os #237) — theming is temporary and wins while it lasts.
+#   HOST    the machine's identity colour, shown ONLY as the hostname dot.
+#           Resolution: ~/dotfiles/private/tmux/colors.json (curated) ->
+#           HaiOS fleet accent ~/.config/hai-os/accent.env -> ACCENT.
 # Optional $1 = tmux socket path (hai-os theme-set hook applies per server).
 T="tmux"
 [ -n "${1:-}" ] && T="tmux -S $1"
-COLOR=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), '') if os.path.exists(f) else '')" 2>/dev/null)
-if [ -z "$COLOR" ] && [ -f "$HOME/.config/hai-os/accent.env" ]; then
-  # shellcheck disable=SC1091
-  . "$HOME/.config/hai-os/accent.env" 2>/dev/null
-  case "${HAI_OS_ACCENT:-}" in
-    \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
-      COLOR="$HAI_OS_ACCENT" ;;
-  esac
-fi
+
+hex_ok() { case "$1" in \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;; esac; return 1; }
+
+ACCENT="#22d3ee"
 if [ -f "$HOME/.config/hai-os/session-accent.env" ]; then
   # shellcheck disable=SC1091
   . "$HOME/.config/hai-os/session-accent.env" 2>/dev/null
-  if [ "${SESSION_ACCENT_SOURCE:-}" = "theme" ]; then
-    case "${SESSION_ACCENT:-}" in
-      \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
-        COLOR="$SESSION_ACCENT" ;;
-    esac
-  fi
+  [ "${SESSION_ACCENT_SOURCE:-}" = "theme" ] && hex_ok "${SESSION_ACCENT:-}" && ACCENT="$SESSION_ACCENT"
 fi
-COLOR=${COLOR:-blue}
-# Bright variant for the active-window title: named colours have a bright*
-# counterpart; hex accents don't, so the hex doubles as its own bright.
-case "$COLOR" in
-  \#*) BRIGHT="$COLOR" ;;
-  *)   BRIGHT="bright$COLOR" ;;
-esac
 
-# Segment background for status-left/right chips: themes may override the
-# default (black) by shipping a tmux-status-bg.hex in the active theme dir.
-SEG_BG="black"
+HOST=$(python3 -c "import json,socket,os; f=os.path.expanduser('~/dotfiles/private/tmux/colors.json'); print(json.load(open(f)).get(socket.gethostname(), '') if os.path.exists(f) else '')" 2>/dev/null)
+if ! hex_ok "$HOST" && [ -f "$HOME/.config/hai-os/accent.env" ]; then
+  # shellcheck disable=SC1091
+  HOST="$(. "$HOME/.config/hai-os/accent.env" 2>/dev/null; echo "${HAI_OS_ACCENT:-}")"
+fi
+hex_ok "$HOST" || HOST="$ACCENT"
+HOST=$(python3 - "$HOST" <<'PY2'
+import sys
+h=sys.argv[1].lstrip('#'); c=[int(h[i:i+2],16) for i in (0,2,4)]
+lum=lambda c:(0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255
+while lum(c)<0.42: c=[min(255,round(v+(255-v)*0.12)) for v in c]
+print('#%02x%02x%02x'%tuple(c))
+PY2
+)
+
+# Tokens (tints are cyan-tint / cyan-line composited over the terminal bg,
+# because tmux has no alpha). A theme may override the chip fill by shipping
+# tmux-status-bg.hex in the active theme dir.
+BG="#03070c"      # --bg, used as ink-on-accent
+INK="#e6f7fb"     # --ink
+INK2="#c9e6ee"    # --ink-2
+MUTED="#8fb8c4"   # --muted
+FAINT="#6f95a1"   # --faint
+CHIP="#0e2633"    # --cyan-tint over bg
+LINE="#135464"    # --cyan-line over bg
+BAND="default"    # status bar has no fill of its own: the terminal
+                  # (and its transparency) shows through
+WARN="#fbbf24"    # --warn
+BAD="#f87171"     # --bad
 if [ -f "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" ]; then
   seg="$(head -1 "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" | tr -d '[:space:]')"
-  case "$seg" in
-    \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) SEG_BG="$seg" ;;
-  esac
+  hex_ok "$seg" && CHIP="$seg"
 fi
+L=$'\ue0b6'  # rounded cap, left
+R=$'\ue0b4'  # rounded cap, right
+G_HEART=$'\uf004'  # nf-fa-heart
+G_MIC=$'\uf130'    # nf-fa-microphone
 
-$T set -g status-bg default
-$T set -g status-style "bg=default,fg=default"
-
-$T set -g pane-active-border-style "fg=$COLOR"
-$T set -g message-style "bg=default,fg=$COLOR"
-$T set -g message-command-style "bg=default,fg=$COLOR"
-$T set -g mode-style "bg=$COLOR,fg=black"
-$T setw -g clock-mode-colour "$COLOR"
-
-# Use status-left / status-right / window-status-format (tmux 3.4 compatible)
-# Unset status-format to let status-left/right take over
 $T set -gu status-format
+$T set -g status-bg default
+$T set -g status-style "bg=$BAND,fg=$MUTED"
+$T set -g status-justify left
+$T set -g status-left-length 60
+$T set -g status-right-length 60
 
-# Left: session name + active pane ID in black bg
-$T set -g status-left "#[bg=$SEG_BG,fg=$COLOR] #S #[fg=brightblack]#{pane_id} #[bg=default,fg=$COLOR]── "
-$T set -g status-left-length 40
+# chrome
+$T set -g pane-border-lines single
+$T set -g pane-border-style "fg=$LINE"
+$T set -g pane-active-border-style "fg=$ACCENT"
+$T set -g message-style "bg=$CHIP,fg=$INK"
+$T set -g message-command-style "bg=$CHIP,fg=$ACCENT"
+$T set -g mode-style "bg=$ACCENT,fg=$BG,bold"
+$T set -g copy-mode-match-style "bg=$LINE,fg=$INK"
+$T set -g copy-mode-current-match-style "bg=$WARN,fg=$BG"
+$T set -g menu-style "bg=default,fg=$INK2"
+$T set -g menu-selected-style "bg=$ACCENT,fg=$BG,bold"
+$T set -g menu-border-style "fg=$ACCENT"
+$T set -g menu-border-lines rounded
+$T set -g popup-style "bg=default,fg=$INK2"
+$T set -g popup-border-style "fg=$ACCENT"
+$T set -g popup-border-lines rounded
+$T set -g display-panes-colour "$LINE"
+$T set -g display-panes-active-colour "$ACCENT"
+$T setw -g clock-mode-colour "$ACCENT"
+$T set -g display-panes-border-style "fg=$LINE"
+$T set -g tree-mode-border-style "fg=$LINE"
+$T set -g tree-mode-preview-style "fg=#{?#{||:#{&&:#{pane_format},#{pane_active}},#{&&:#{window_format},#{window_active}}},$ACCENT,$LINE}"
+$T set -g pane-scrollbars-style "bg=$CHIP,fg=$ACCENT,width=1,pad=0"
+$T set -g copy-mode-mark-style "bg=$WARN,fg=$BG"
+$T set -g copy-mode-line-number-style "fg=$LINE"
+$T set -g copy-mode-current-line-number-style "fg=$ACCENT"
+$T set -g switch-mode-match-style "bg=$ACCENT,fg=$BG"
+# tmux 3.8 defaults: underscore on current, reverse on bell/activity — the
+# formats below own all of that, so neutralise the built-in styles.
+$T setw -g window-status-style default
+$T setw -g window-status-current-style default
+$T setw -g window-status-last-style default
+$T setw -g window-status-activity-style default
+$T setw -g window-status-bell-style default
+$T set -g session-status-current-style "fg=$ACCENT,bold"
+$T set -g pane-status-current-style "fg=$ACCENT,bold"
 
-# Right: fill line + hostname
-# Prepend tmux-continuum's save hook so periodic saves still fire after we
-# overwrite status-right (status refresh is what triggers continuum_save.sh).
+# Left: session chip (cyan; amber + word while the prefix is held, so the
+# state is never colour alone) and the active pane id on a glass chip.
+STATE="#{?client_prefix,$WARN,$ACCENT}"
+$T set -g status-left "#[fg=$STATE,bg=$BAND]$L#[fg=$BG,bg=$STATE,bold]#{?client_prefix,PREFIX ,}#S#[fg=$STATE,bg=$CHIP,nobold]$R#[fg=$MUTED,bg=$CHIP] #{pane_id}#[fg=$CHIP,bg=$BAND]$R  "
+
+# Right: tmux-continuum's save hook must stay first — status refresh is what
+# fires periodic saves. Then the hostname, with the host identity dot.
 CONTINUUM_HOOK=""
 if [ -x "$HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh" ]; then
   CONTINUUM_HOOK="#($HOME/.config/tmux/plugins/tmux-continuum/scripts/continuum_save.sh)"
 fi
-$T set -g status-right "${CONTINUUM_HOOK}#[fg=$COLOR]── #[bg=$SEG_BG,fg=$COLOR] #h #[bg=default,fg=$COLOR] ──"
-$T set -g status-right-length 40
+$T set -g status-right "${CONTINUUM_HOOK}#[fg=$CHIP,bg=$BAND]$L#[fg=$HOST,bg=$CHIP]● #[fg=$INK,bg=$CHIP]#h#[fg=$CHIP,bg=$BAND]$R"
 
-$T set -g status-justify left
+# Windows — the same two-tone pill as the session: a solid index cell, then
+# a glass body with pane id, name, and the running command when it differs.
+# Inactive windows are the same shape drawn quietly, no fill; under 120
+# columns they drop their pane id so the list doesn't truncate.
+DOT="#[fg=$LINE] · "
+$T set -g window-status-separator " "
+$T set -g window-status-format "#[fg=$FAINT,bg=$BAND] #I #{?#{e|<:#{client_width},120},,#[fg=$LINE]#{pane_id} }#[fg=$MUTED]#W#{?window_bell_flag,#[fg=$BAD#,bold] bell#[nobold],}#{?window_zoomed_flag,#[fg=$FAINT] zoom,} "
+$T set -g window-status-current-format "#[fg=$ACCENT,bg=$BAND]$L#[fg=$BG,bg=$ACCENT,bold]#I#[fg=$ACCENT,bg=$CHIP,nobold]$R#[fg=$MUTED] #{pane_id} #[fg=$INK,bold]#W#[nobold]#{?#{==:#W,#{pane_current_command}},,$DOT#[fg=$MUTED]#{=12:pane_current_command}}#{?window_zoomed_flag,$DOT#[fg=$ACCENT]zoom,}#[fg=$CHIP,bg=$BAND]$R"
 
-# Inactive windows: dim
-$T set -g window-status-format "#[fg=brightblack]#I:#{pane_id} #W "
-$T set -g window-status-separator ""
-
-# Active window: bright accent bold, with process suffix if different
-$T set -g window-status-current-format "#[fg=$BRIGHT,bold]#I:#{pane_id} #W#[fg=$BRIGHT]#{?#{==:#W,#{pane_current_command}},,:#[fg=$BRIGHT]#{=10:pane_current_command}} "
-
-# Top pane border with black background.
-#
-# When the pane is the talking-stick holder (its id == contents of
-# /tmp/talking-stick-holder), the ENTIRE title line is rendered in yellow
-# bold — not just the 🎤 STICK prefix — so the holder is unmistakable
-# even when the title text is occluded. The left/right ─── characters
-# tmux draws around the title come from pane-active-border-style /
-# pane-border-style (host-theme colour); tmux has no per-pane border
-# style, so those stay theme-coloured by design.
-#
-# A ❤ prefix is added when the pane has a live heartbeat. The match
-# uses tmux's `#{m:pattern,string}` against ` %5 %7 …`-style output
-# from `heartbeat tmux-active-panes`; the surrounding spaces guarantee
-# word-boundary matches so `%5` doesn't bleed into `%50`.
-#
-# Refreshes every status-interval (~2s) so the bar follows on transfer.
-if [ "$(tmux show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
-  # We compare numeric ids (37 vs 37), not "%37" vs "%37" — tmux's format
-  # engine re-interprets a literal `%37` as a width directive and pads
-  # with spaces, so the comparison silently fails. Strip the leading `%`
-  # from pane_id via #{s/^%//:pane_id} and strip `%` (and newline) from
-  # the holder file output with `tr -d "%\n"`.
-  tmux set -g pane-border-format "#[bg=$SEG_BG] #{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},#[fg=red#,bold]❤ #[bg=$SEG_BG],}#{?#{==:#{s/^%//:pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null | tr -d '%\\n')},#[fg=yellow#,bold]🎤 STICK ─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}},#{?pane_active,#[fg=$COLOR bold],#[fg=brightblack]}─ #{pane_id}: #{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}}} #[bg=default,fg=default]"
+# Pane header (top border label).
+# Talking-stick holder (its id == /tmp/talking-stick-holder): the whole label
+# turns amber with a mic glyph and the word STICK. A live heartbeat adds a red
+# heart glyph. Numeric ids are compared (tmux reads a literal `%37` as a width
+# directive), hence #{s/^%//:pane_id} and `tr -d "%\n"`. The heartbeat match
+# uses ` %5 %7 ` spacing so %5 never bleeds into %50. Refreshes every
+# status-interval (~2s), so the label follows a stick transfer.
+if [ "$($T show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
+  NAME="#{?#{!=:#{pane_title},#{host}},#{pane_title},#{pane_current_command}}"
+  HEART="#{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},#[fg=$BAD]$G_HEART ,}"
+  STICK="#{==:#{s/^%//:pane_id},#(cat /tmp/talking-stick-holder 2>/dev/null | tr -d '%\\n')}"
+  # heartbeat drawn dark on amber so it survives inside the holder pill
+  HEART_ON_STICK="#{?#{m:* #{pane_id} *,#(cat /tmp/heartbeat-active-panes 2>/dev/null)},$G_HEART ,}"
+  # holder: one solid amber pill — mic, the word STICK, heartbeat, id, name
+  P_STICK="#[fg=$WARN]$L#[bg=$WARN#,fg=$BG#,bold]$G_MIC STICK  $HEART_ON_STICK#{pane_id}  $NAME#[bg=default#,fg=$WARN#,nobold]$R"
+  # active: two-tone pill like the active window (solid id, glass title)
+  P_ACTIVE="#[fg=$ACCENT]$L#[bg=$ACCENT#,fg=$BG#,bold]#{pane_id}#[bg=$CHIP#,fg=$ACCENT#,nobold]$R $HEART#[fg=$INK]$NAME#[bg=default#,fg=$CHIP]$R"
+  # inactive: same shape, no fill
+  P_IDLE="#[fg=$FAINT] #{pane_id} $HEART#[fg=$MUTED]$NAME "
+  $T set -g pane-border-format "#{?$STICK,$P_STICK,#{?pane_active,$P_ACTIVE,$P_IDLE}}#[default]"
 fi
