@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""haios-cell-font — the chamfer caps for tmux-shape=slant, sized to the cell.
+
+U+1FB52 (a full cell but its bottom-left corner) and U+1FB4C (a full cell
+but its top-right corner) are not in JetBrainsMono Nerd Font, so a terminal
+falls back to a font with other metrics and the caps stop short of the cell
+top and bottom. This builds a two-glyph font, "HAIos Cell", with the primary
+font's em, ascent, descent and advance, drawn edge to edge (overshooting a
+few units like the Nerd Font powerline caps), and a fontconfig rule that
+puts it right after JetBrainsMono Nerd Font in the fallback list.
+
+  haios-cell-font          build if missing or outdated (idempotent)
+  haios-cell-font --force  rebuild
+
+Writes ~/.local/share/fonts/HAIosCell.ttf and
+~/.config/fontconfig/conf.d/60-haios-cell.conf; needs python fontTools.
+"""
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+VERSION = 2
+PRIMARY = "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf"
+HOME = os.path.expanduser("~")
+FONT = os.path.join(HOME, ".local/share/fonts/HAIosCell.ttf")
+CONF = os.path.join(HOME, ".config/fontconfig/conf.d/60-haios-cell.conf")
+STAMP = FONT + ".v"
+
+CONF_XML = """<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!-- haios-cell-font: cell-sized chamfer caps for the tmux theme, tried
+     right after the terminal font so they win over other fallbacks. -->
+<fontconfig>
+  <alias binding="strong">
+    <family>JetBrainsMono Nerd Font</family>
+    <accept><family>HAIos Cell</family></accept>
+  </alias>
+</fontconfig>
+"""
+
+
+def metrics():
+    # the primary font's, else JetBrains Mono's published ones
+    try:
+        from fontTools.ttLib import TTFont
+        f = TTFont(PRIMARY)
+        return (f["head"].unitsPerEm, f["hhea"].ascent, f["hhea"].descent,
+                f["hmtx"][f.getBestCmap()[ord("A")]][0])
+    except Exception:
+        return 1000, 1020, -300, 600
+
+
+def build():
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    upm, asc, desc, adv = metrics()
+    over = 7                        # the powerline caps overshoot this much
+    top, bot = asc + over, desc - over
+    cut = round((top - bot) * 0.25)  # the chamfer, 45 degrees
+
+    def poly(points):
+        pen = TTGlyphPen(None)
+        pen.moveTo(points[0])
+        for p in points[1:]:
+            pen.lineTo(p)
+        pen.closePath()
+        return pen.glyph()
+
+    pen = TTGlyphPen(None)
+    glyphs = {
+        ".notdef": pen.glyph(),
+        # fontconfig reads no charset from a font with nothing in the BMP
+        "space": TTGlyphPen(None).glyph(),
+        # clockwise outer contours (TrueType)
+        "capL": poly([(0, bot + cut), (0, top), (adv, top), (adv, bot), (cut, bot)]),
+        "capR": poly([(0, bot), (0, top), (adv - cut, top), (adv, top - cut), (adv, bot)]),
+    }
+    fb = FontBuilder(upm, isTTF=True)
+    fb.setupGlyphOrder(list(glyphs))
+    fb.setupCharacterMap({0x20: "space", 0x1FB52: "capL", 0x1FB4C: "capR"})
+    fb.setupGlyf(glyphs)
+    fb.setupHorizontalMetrics({g: (adv, 0) for g in glyphs})
+    fb.setupHorizontalHeader(ascent=asc, descent=desc)
+    fb.setupNameTable({"familyName": "HAIos Cell", "styleName": "Regular"})
+    fb.setupOS2(sTypoAscender=asc, sTypoDescender=desc, usWinAscent=asc,
+                usWinDescent=-desc, xAvgCharWidth=adv)
+    fb.setupPost(isFixedPitch=1)
+    os.makedirs(os.path.dirname(FONT), exist_ok=True)
+    import io
+    buf = io.BytesIO()
+    fb.save(buf)
+    put(FONT, buf.getvalue())
+
+
+def stamp():
+    # rebuilt when this builder or the primary font's metrics change
+    return "%d %s" % (VERSION, " ".join(map(str, metrics())))
+
+
+def owned(path):
+    # only ever replace our own file: never follow a symlink, never clobber a
+    # file someone else put there (ours: the HAIos Cell font, our stamp, or a
+    # config carrying our marker)
+    if os.path.islink(path):
+        return False
+    if not os.path.exists(path):
+        return True
+    try:
+        if path == FONT:
+            from fontTools.ttLib import TTFont
+            return TTFont(path)["name"].getDebugName(1) == "HAIos Cell"
+        if path == STAMP and os.path.getsize(path) > 64:
+            return False
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except Exception:
+        return False
+    if path == STAMP:   # the whole file: a legacy "N", or "VERSION em ascent descent advance"
+        return re.fullmatch(rb"\d{1,3}( \d{1,5} -?\d{1,5} -?\d{1,5} \d{1,5})?\n?", head) is not None
+    return b"haios-cell-font" in head
+
+
+def put(path, data):
+    # a fresh, exclusively created temp file beside the target, renamed over it
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".haios-cell-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def main():
+    force = "--force" in sys.argv[1:]
+    want = stamp()
+    try:
+        # a cache hit needs the stamp AND a real HAIos Cell font behind it
+        current = open(STAMP).read().strip() == want and os.path.exists(FONT) and owned(FONT)
+    except OSError:
+        current = False
+    changed = False
+    if force or not current:
+        for path in (FONT, STAMP):
+            if not owned(path):
+                print("haios-cell-font: %s is not ours, leaving it" % path, file=sys.stderr)
+                return 1
+        build()
+        put(STAMP, want.encode())
+        changed = True
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    try:
+        have = open(CONF).read() if os.path.exists(CONF) else None
+    except OSError:
+        have = None
+    if have != CONF_XML:
+        if not owned(CONF):
+            print("haios-cell-font: %s is not ours, leaving it" % CONF, file=sys.stderr)
+            return 1
+        put(CONF, CONF_XML.encode())
+        changed = True
+    if changed:
+        subprocess.run(["fc-cache", "-f", os.path.dirname(FONT)], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
