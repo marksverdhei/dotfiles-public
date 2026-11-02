@@ -60,12 +60,17 @@ fi
 L=$'\ue0b6'  # rounded cap, left
 R=$'\ue0b4'  # rounded cap, right
 BOX=rounded   # menu and popup borders
-# A theme may ship tmux-shape: "slant" makes every chip a rectangle with its
-# bottom-left and top-right corners cut on a diagonal (a game-HUD tab), and
-# menus and popups square.
+M="$R"        # the seam between a pill's solid and glass halves
+P=""          # padding inside a solid half
+# A theme may ship tmux-shape: "slant" makes every chip a rectangle with
+# small chamfers on its bottom-left and top-right corners (a game-HUD
+# button; Unicode legacy-computing block diagonals), a straight seam inside
+# two-tone pills, and square menus and popups.
 if [ "$(head -1 "$HOME/.config/omarchy/current/theme/tmux-shape" 2>/dev/null | tr -d '[:space:]')" = slant ]; then
-  L=$'\ue0be'  # upper-right triangle: the bottom-left corner cut
-  R=$'\ue0b8'  # lower-left triangle: the top-right corner cut
+  L=$'\U0001fb52'  # full cell but the bottom-left corner
+  R=$'\U0001fb4c'  # full cell but the top-right corner
+  M=""
+  P=" "
   BOX=single
 fi
 G_HEART=$'\uf004'  # nf-fa-heart
@@ -118,7 +123,7 @@ $T set -g pane-status-current-style "fg=$ACCENT,bold"
 # Left: session chip (cyan; amber + word while the prefix is held, so the
 # state is never colour alone) and the active pane id on a glass chip.
 STATE="#{?client_prefix,$WARN,$ACCENT}"
-$T set -g status-left "#[fg=$STATE,bg=$BAND]$L#[fg=$BG,bg=$STATE,bold]#{?client_prefix,PREFIX ,}#S#[fg=$STATE,bg=$CHIP,nobold]$R#[fg=$MUTED,bg=$CHIP] #{pane_id}#[fg=$CHIP,bg=$BAND]$R  "
+$T set -g status-left "#[fg=$STATE,bg=$BAND]$L#[fg=$BG,bg=$STATE,bold]$P#{?client_prefix,PREFIX ,}#S$P#[fg=$STATE,bg=$CHIP,nobold]$M#[fg=$MUTED,bg=$CHIP] #{pane_id}#[fg=$CHIP,bg=$BAND]$R  "
 
 # Right: tmux-continuum's save hook must stay first — status refresh is what
 # fires periodic saves. Then the hostname, with the host identity dot.
@@ -135,7 +140,7 @@ $T set -g status-right "${CONTINUUM_HOOK}#[fg=$CHIP,bg=$BAND]$L#[fg=$HOST,bg=$CH
 DOT="#[fg=$LINE] · "
 $T set -g window-status-separator " "
 $T set -g window-status-format "#[fg=$FAINT,bg=$BAND] #I #{?#{e|<:#{client_width},120},,#[fg=$LINE]#{pane_id} }#[fg=$MUTED]#W#{?window_bell_flag,#[fg=$BAD#,bold] bell#[nobold],}#{?window_zoomed_flag,#[fg=$FAINT] zoom,} "
-$T set -g window-status-current-format "#[fg=$ACCENT,bg=$BAND]$L#[fg=$BG,bg=$ACCENT,bold]#I#[fg=$ACCENT,bg=$CHIP,nobold]$R#[fg=$MUTED] #{pane_id} #[fg=$INK,bold]#W#[nobold]#{?#{==:#W,#{pane_current_command}},,$DOT#[fg=$MUTED]#{=12:pane_current_command}}#{?window_zoomed_flag,$DOT#[fg=$ACCENT]zoom,}#[fg=$CHIP,bg=$BAND]$R"
+$T set -g window-status-current-format "#[fg=$ACCENT,bg=$BAND]$L#[fg=$BG,bg=$ACCENT,bold]$P#I$P#[fg=$ACCENT,bg=$CHIP,nobold]$M#[fg=$MUTED] #{pane_id} #[fg=$INK,bold]#W#[nobold]#{?#{==:#W,#{pane_current_command}},,$DOT#[fg=$MUTED]#{=12:pane_current_command}}#{?window_zoomed_flag,$DOT#[fg=$ACCENT]zoom,}#[fg=$CHIP,bg=$BAND]$R"
 
 # Pane header (top border label).
 # Talking-stick holder (its id == /tmp/talking-stick-holder): the whole label
@@ -153,7 +158,7 @@ if [ "$($T show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
   # holder: one solid amber pill — mic, the word STICK, heartbeat, id, name
   P_STICK="#[fg=$WARN]$L#[bg=$WARN#,fg=$BG#,bold]$G_MIC STICK  $HEART_ON_STICK#{pane_id}  $NAME#[bg=default#,fg=$WARN#,nobold]$R"
   # active: two-tone pill like the active window (solid id, glass title)
-  P_ACTIVE="#[fg=$ACCENT]$L#[bg=$ACCENT#,fg=$BG#,bold]#{pane_id}#[bg=$CHIP#,fg=$ACCENT#,nobold]$R $HEART#[fg=$INK]$NAME#[bg=default#,fg=$CHIP]$R"
+  P_ACTIVE="#[fg=$ACCENT]$L#[bg=$ACCENT#,fg=$BG#,bold]$P#{pane_id}$P#[bg=$CHIP#,fg=$ACCENT#,nobold]$M $HEART#[fg=$INK]$NAME#[bg=default#,fg=$CHIP]$R"
   # inactive: same shape, no fill
   P_IDLE="#[fg=$FAINT] #{pane_id} $HEART#[fg=$MUTED]$NAME "
   $T set -g pane-border-format "#{?$STICK,$P_STICK,#{?pane_active,$P_ACTIVE,$P_IDLE}}#[default]"
