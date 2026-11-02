@@ -16,8 +16,10 @@ Writes ~/.local/share/fonts/HAIosCell.ttf and
 ~/.config/fontconfig/conf.d/60-haios-cell.conf; needs python fontTools.
 """
 import os
+import re
 import subprocess
 import sys
+import tempfile
 
 VERSION = 2
 PRIMARY = "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf"
@@ -87,8 +89,10 @@ def build():
                 usWinDescent=-desc, xAvgCharWidth=adv)
     fb.setupPost(isFixedPitch=1)
     os.makedirs(os.path.dirname(FONT), exist_ok=True)
-    fb.save(FONT + ".tmp")
-    os.replace(FONT + ".tmp", FONT)
+    import io
+    buf = io.BytesIO()
+    fb.save(buf)
+    put(FONT, buf.getvalue())
 
 
 def stamp():
@@ -97,25 +101,36 @@ def stamp():
 
 
 def owned(path):
-    # only ever replace our own file: never follow a symlink, never clobber
-    # a file someone else put there
+    # only ever replace our own file: never follow a symlink, never clobber a
+    # file someone else put there (ours: the HAIos Cell font, our stamp, or a
+    # config carrying our marker)
     if os.path.islink(path):
         return False
     if not os.path.exists(path):
         return True
     try:
+        if path == FONT:
+            from fontTools.ttLib import TTFont
+            return TTFont(path)["name"].getDebugName(1) == "HAIos Cell"
         with open(path, "rb") as f:
             head = f.read(4096)
-    except OSError:
+    except Exception:
         return False
-    return path in (FONT, STAMP) or b"haios-cell-font" in head
+    if path == STAMP:
+        return re.fullmatch(rb"\d+( -?\d+)*\s*", head) is not None
+    return b"haios-cell-font" in head
 
 
 def put(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "wb") as f:
-        f.write(data)
-    os.replace(tmp, path)
+    # a fresh, exclusively created temp file beside the target, renamed over it
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".haios-cell-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def main():
