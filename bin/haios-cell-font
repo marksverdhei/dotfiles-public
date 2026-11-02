@@ -112,12 +112,14 @@ def owned(path):
         if path == FONT:
             from fontTools.ttLib import TTFont
             return TTFont(path)["name"].getDebugName(1) == "HAIos Cell"
+        if path == STAMP and os.path.getsize(path) > 64:
+            return False
         with open(path, "rb") as f:
             head = f.read(4096)
     except Exception:
         return False
-    if path == STAMP:
-        return re.fullmatch(rb"\d+( -?\d+)*\s*", head) is not None
+    if path == STAMP:   # the whole file: a legacy "N", or "VERSION em ascent descent advance"
+        return re.fullmatch(rb"\d{1,3}( \d{1,5} -?\d{1,5} -?\d{1,5} \d{1,5})?\n?", head) is not None
     return b"haios-cell-font" in head
 
 
@@ -137,7 +139,8 @@ def main():
     force = "--force" in sys.argv[1:]
     want = stamp()
     try:
-        current = os.path.exists(FONT) and open(STAMP).read().strip() == want
+        # a cache hit needs the stamp AND a real HAIos Cell font behind it
+        current = open(STAMP).read().strip() == want and os.path.exists(FONT) and owned(FONT)
     except OSError:
         current = False
     changed = False
