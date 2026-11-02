@@ -87,23 +87,63 @@ def build():
                 usWinDescent=-desc, xAvgCharWidth=adv)
     fb.setupPost(isFixedPitch=1)
     os.makedirs(os.path.dirname(FONT), exist_ok=True)
-    fb.save(FONT)
+    fb.save(FONT + ".tmp")
+    os.replace(FONT + ".tmp", FONT)
+
+
+def stamp():
+    # rebuilt when this builder or the primary font's metrics change
+    return "%d %s" % (VERSION, " ".join(map(str, metrics())))
+
+
+def owned(path):
+    # only ever replace our own file: never follow a symlink, never clobber
+    # a file someone else put there
+    if os.path.islink(path):
+        return False
+    if not os.path.exists(path):
+        return True
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except OSError:
+        return False
+    return path in (FONT, STAMP) or b"haios-cell-font" in head
+
+
+def put(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
 
 
 def main():
     force = "--force" in sys.argv[1:]
-    current = os.path.exists(FONT) and open(STAMP).read().strip() == str(VERSION) \
-        if os.path.exists(STAMP) else False
+    want = stamp()
+    try:
+        current = os.path.exists(FONT) and open(STAMP).read().strip() == want
+    except OSError:
+        current = False
     changed = False
     if force or not current:
+        for path in (FONT, STAMP):
+            if not owned(path):
+                print("haios-cell-font: %s is not ours, leaving it" % path, file=sys.stderr)
+                return 1
         build()
-        with open(STAMP, "w") as f:
-            f.write(str(VERSION))
+        put(STAMP, want.encode())
         changed = True
     os.makedirs(os.path.dirname(CONF), exist_ok=True)
-    if not os.path.exists(CONF) or open(CONF).read() != CONF_XML:
-        with open(CONF, "w") as f:
-            f.write(CONF_XML)
+    try:
+        have = open(CONF).read() if os.path.exists(CONF) else None
+    except OSError:
+        have = None
+    if have != CONF_XML:
+        if not owned(CONF):
+            print("haios-cell-font: %s is not ours, leaving it" % CONF, file=sys.stderr)
+            return 1
+        put(CONF, CONF_XML.encode())
         changed = True
     if changed:
         subprocess.run(["fc-cache", "-f", os.path.dirname(FONT)], check=False)
