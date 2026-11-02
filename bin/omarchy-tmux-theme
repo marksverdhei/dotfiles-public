@@ -72,6 +72,9 @@ if [ "$(head -1 "$HOME/.config/omarchy/current/theme/tmux-shape" 2>/dev/null | t
   M=""
   P=" "
   BOX=single
+  # the terminal font lacks these two; a cell-sized pair (HAIos Cell) keeps
+  # the caps full height. Terminals already open pick it up on restart.
+  "$(dirname "$(readlink -f "$0")")/haios-cell-font" >/dev/null 2>&1 || true
 fi
 G_HEART=$'\uf004'  # nf-fa-heart
 G_MIC=$'\uf130'    # nf-fa-microphone
