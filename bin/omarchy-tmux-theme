@@ -59,6 +59,15 @@ if [ -f "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" ]; then
 fi
 L=$'\ue0b6'  # rounded cap, left
 R=$'\ue0b4'  # rounded cap, right
+BOX=rounded   # menu and popup borders
+# A theme may ship tmux-shape: "slant" makes every chip a rectangle with its
+# bottom-left and top-right corners cut on a diagonal (a game-HUD tab), and
+# menus and popups square.
+if [ "$(head -1 "$HOME/.config/omarchy/current/theme/tmux-shape" 2>/dev/null | tr -d '[:space:]')" = slant ]; then
+  L=$'\ue0be'  # upper-right triangle: the bottom-left corner cut
+  R=$'\ue0b8'  # lower-left triangle: the top-right corner cut
+  BOX=single
+fi
 G_HEART=$'\uf004'  # nf-fa-heart
 G_MIC=$'\uf130'    # nf-fa-microphone
 
@@ -81,10 +90,10 @@ $T set -g copy-mode-current-match-style "bg=$WARN,fg=$BG"
 $T set -g menu-style "bg=default,fg=$INK2"
 $T set -g menu-selected-style "bg=$ACCENT,fg=$BG,bold"
 $T set -g menu-border-style "fg=$ACCENT"
-$T set -g menu-border-lines rounded
+$T set -g menu-border-lines $BOX
 $T set -g popup-style "bg=default,fg=$INK2"
 $T set -g popup-border-style "fg=$ACCENT"
-$T set -g popup-border-lines rounded
+$T set -g popup-border-lines $BOX
 $T set -g display-panes-colour "$LINE"
 $T set -g display-panes-active-colour "$ACCENT"
 $T setw -g clock-mode-colour "$ACCENT"
