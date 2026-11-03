@@ -53,6 +53,17 @@ BAND="default"    # status bar has no fill of its own: the terminal
                   # (and its transparency) shows through
 WARN="#fbbf24"    # --warn
 BAD="#f87171"     # --bad
+# The active theme's tokens, as hai-os's one resolver (haios-theme-tokens,
+# hai-os #713) wrote them: the same ink, muted and opaque chip/line Quickshell
+# and the prompt draw. Status colours stay; a missing file keeps the house look.
+if [ -f "$HOME/.config/hai-os/theme/tokens.env" ]; then
+  # shellcheck disable=SC1091
+  eval "$(. "$HOME/.config/hai-os/theme/tokens.env" 2>/dev/null
+    for v in BG:BG INK:INK INK2:INK_2 MUTED:MUTED FAINT:FAINT CHIP:CHIP LINE:LINE; do
+      t="HAIOS_TOKEN_${v#*:}"; t="${!t:-}"
+      hex_ok "$t" && printf '%s=%s\n' "${v%%:*}" "$t"
+    done)"
+fi
 if [ -f "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" ]; then
   seg="$(head -1 "$HOME/.config/omarchy/current/theme/tmux-status-bg.hex" | tr -d '[:space:]')"
   hex_ok "$seg" && CHIP="$seg"
