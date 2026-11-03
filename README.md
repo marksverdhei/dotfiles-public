@@ -73,7 +73,9 @@ Key symlinks created by bootstrap:
 - `~/.config/nvim` → `dotfiles/nvim/`
 - `~/.config/ghostty` → `dotfiles/ghostty/`
 - `~/.config/starship.toml` is generated, not a symlink: `bootstrap/prompt.bash` renders
-  `starship/starship.toml` (or the private base) with the machine accent as `session_bg`
+  `starship/starship.toml` (or the private base) with the machine accent as `session_bg`.
+  On HAIos (`haios-starship-theme` on PATH) it is left alone: the OS seeds the prompt
+  and recolours it with the theme
 
 ## Private Dotfiles
 
