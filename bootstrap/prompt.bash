@@ -10,6 +10,8 @@
 #   3. bin/hai-os-accent             (private resolver: omp/colors.json by hostname)
 #   4. sane default
 #
+# On HAIos (haios-starship-theme on PATH) nothing is written: the OS config wins.
+#
 # Template: the private base (richer "host" palette) when the private repo is
 # present, else the public default.
 
@@ -25,7 +27,12 @@ fi
 [[ -z "$_accent" ]] && command -v hai-os-accent >/dev/null 2>&1 && _accent="$(hai-os-accent)"
 _accent="${_accent:-#7aa2f7}"
 
-if [[ -f "$starship_template" ]]; then
+# On HAIos the prompt belongs to the OS: hai-os seeds ~/.config/starship.toml and
+# its theme hooks recolour it (haios-starship-theme). Writing ours here would
+# replace that config on every bootstrap, so leave it alone.
+if command -v haios-starship-theme >/dev/null 2>&1; then
+  ok "Starship → HAIos owns the prompt (dotfiles template not applied)"
+elif [[ -f "$starship_template" ]]; then
   mkdir -p "$HOME/.config"
   # ~/.config/starship.toml is a GENERATED file now, not a symlink — drop any
   # stale symlink first so we never write through to a repo file.
