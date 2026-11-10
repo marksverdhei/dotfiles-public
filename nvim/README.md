@@ -32,14 +32,17 @@ This Neovim configuration is based on [NvChad v2.5](https://github.com/NvChad/Nv
 | Insert | `jk` | `<ESC>` | Exit to normal mode |
 | Normal | `<leader>tt` | `:terminal<CR>` | Open terminal |
 | Normal | `gp` | `"_ddP` | Replace line with yanked content |
-| Normal | `vv` | `V` | Start linewise visual mode |
+| Normal | `<leader>V` | `ggVG` | Select entire file |
+| Normal | `<leader>Y` | `:%yank` | Yank entire file without moving cursor |
 
 ### Terminal Mode
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<Esc>` | `<C-\><C-n>` | Exit terminal to normal mode |
-| `<C-w>` | `<C-\><C-n><C-w>` | Enter window select mode from terminal |
+| `<Esc><Esc>` | `<C-\><C-n>` | Exit terminal to normal mode (a single `<Esc>` still reaches TUIs) |
+| `<C-x>` | `<C-\><C-n>` | Exit terminal to normal mode (NvChad default) |
+
+`<C-w>` is not mapped, so the shell keeps delete-word.
 
 ### Tmux Integration (vim-tmux-navigator)
 
@@ -60,14 +63,12 @@ Navigation between Neovim and Tmux panes:
 
 | Mode | Key | Action | Description |
 |------|-----|--------|-------------|
-| Visual | `A` | `<ESC>GVgg` | Mark entire file |
-| Visual | `yA` | `<ESC><cmd>%yank<CR>` | Yank entire file without moving cursor |
 | Visual (x) | `<leader>s` | `:'<,'>sort<CR>` | Sort selected lines ascending |
 | Visual (x) | `<leader>S` | `:'<,'>sort!<CR>` | Sort selected lines descending |
 
 ### Line Movement
 
-Move lines up/down in any mode:
+Move lines up/down (normal mode accepts a count, e.g. `3<A-j>`):
 
 | Mode | Key | Action |
 |------|-----|--------|
@@ -82,7 +83,7 @@ Move lines up/down in any mode:
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<leader>c` | `:MdToggleCheckbox<CR>` | Toggle checkbox `[ ]` ↔ `[x]` |
+| `<leader>mc` | `md_toggle_checkbox` | Toggle checkbox `[ ]` ↔ `[x]` |
 | `<leader>ms` | `md_sort_checkboxes` | Sort checkboxes: unchecked up, checked down |
 
 ### Bash/Command Utilities
