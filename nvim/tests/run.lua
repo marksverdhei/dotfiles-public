@@ -102,5 +102,26 @@ test("for_theme: resolves any family member to its mid theme", function()
   eq(mid.for_theme "nope", nil)
 end)
 
+-- configs.lock_guard -------------------------------------------------------
+local lock_guard = require "configs.lock_guard"
+
+test("lock_guard: restores a lockfile rewritten after the snapshot", function()
+  local path = vim.fn.tempname()
+  vim.fn.writefile({ '{ "a": "pinned" }' }, path)
+  local snap = lock_guard.snapshot(path)
+  vim.fn.writefile({ '{ "a": "stale" }' }, path)
+  eq(lock_guard.restore_if_changed(snap), true)
+  eq(vim.fn.readfile(path), { '{ "a": "pinned" }' })
+  os.remove(path)
+end)
+test("lock_guard: leaves an unchanged or missing lockfile alone", function()
+  local path = vim.fn.tempname()
+  vim.fn.writefile({ "same" }, path)
+  eq(lock_guard.restore_if_changed(lock_guard.snapshot(path)), false)
+  os.remove(path)
+  eq(lock_guard.restore_if_changed(lock_guard.snapshot(path)), false)
+  eq(vim.uv.fs_stat(path), nil)
+end)
+
 print(("%d tests, %d failed"):format(count, failures))
 os.exit(failures == 0 and 0 or 1)

@@ -15,6 +15,14 @@ vim.opt.rtp:prepend(lazypath)
 
 local lazy_config = require "configs.lazy"
 
+-- When lazy.nvim installs a missing plugin at startup it uses the locked
+-- commit, but then rewrites lazy-lock.json from *every* installed plugin. After
+-- pulling a change that adds a plugin, that silently replaces the committed
+-- pins with whatever older commits happen to be on disk. Snapshot the lockfile
+-- here and put it back if startup changed it.
+local lock_guard = require "configs.lock_guard"
+local lock_snapshot = lock_guard.snapshot(lazy_config.lockfile)
+
 -- load plugins
 require("lazy").setup({
   {
@@ -26,6 +34,8 @@ require("lazy").setup({
 
   { import = "plugins" },
 }, lazy_config)
+
+lock_guard.restore_if_changed(lock_snapshot)
 
 -- load theme (only if cache exists, otherwise base46 will compile on first load)
 local base46_defaults = vim.g.base46_cache .. "defaults"
