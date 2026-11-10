@@ -1,7 +1,6 @@
 require "nvchad.autocmds"
 
 local autocmd = vim.api.nvim_create_autocmd
-local augroup = vim.api.nvim_create_augroup
 
 autocmd("BufWritePost", {
   pattern = "lua/mappings.lua",
@@ -23,6 +22,11 @@ autocmd("VimEnter", {
 -- Always turn both options on whenever a window becomes current
 autocmd({ "BufWinEnter", "WinEnter", "TermOpen" }, {
   callback = function()
+    -- Skip floats and special buffers (NvimTree, Telescope, help, ...)
+    local bt = vim.bo.buftype
+    if vim.api.nvim_win_get_config(0).relative ~= "" or (bt ~= "" and bt ~= "terminal") then
+      return
+    end
     vim.wo.number = true
     vim.wo.relativenumber = true
   end,
@@ -31,32 +35,20 @@ autocmd({ "BufWinEnter", "WinEnter", "TermOpen" }, {
 -- Auto-render ANSI escape codes when opening .ans files
 autocmd("BufReadPost", {
   pattern = "*.ans",
-  callback = function()
+  callback = function(args)
+    -- Respect a manual :ToggleAnsi off (which reloads the file and lands here)
+    if vim.b[args.buf].ansi_raw then
+      return
+    end
     vim.schedule(function()
-      local ok = pcall(vim.cmd, "ToggleAnsi")
-      if not ok then
-        vim.notify("baleia.nvim not loaded yet — use :ToggleAnsi manually", vim.log.levels.WARN)
-      end
+      require("cmds").toggle_ansi()
     end)
   end,
 })
 
--- Treat Slurm scripts as Bash/Shell files for syntax highlighting
-autocmd({ "BufRead", "BufNewFile" }, {
-  pattern = { "*.slurm", "*.sbatch", "*sbatch*" },
-  desc = "Set filetype to sh for Slurm files",
-  command = "setfiletype sh",
-})
-
--- Resize terminal windows to half the screen width when opened
--- Currently does not work as expected, commented out
--- augroup("Term50", { clear = true })
--- autocmd("TermOpen", {
---   group = "Term50",
---   callback = function()
---     if vim.bo.buftype == "terminal" then
---       local half = math.floor(vim.o.columns * 0.5)
---       vim.cmd("vertical resize " .. half)
---     end
---   end,
--- })
+-- Treat Slurm scripts as Bash/Shell files for syntax highlighting.
+-- The pattern runs after extension matching, so e.g. sbatch_utils.py stays Python.
+vim.filetype.add {
+  extension = { slurm = "sh", sbatch = "sh" },
+  pattern = { [".*/[^/]*sbatch[^/]*"] = { "sh", { priority = -math.huge } } },
+}

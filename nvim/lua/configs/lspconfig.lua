@@ -12,6 +12,8 @@ local servers = {
   cssls = "vscode-css-language-server",
   pyright = "pyright-langserver",
   marksman = "marksman",
+  ruff = "ruff",
+  bashls = "bash-language-server",
 }
 
 local enabled = {}

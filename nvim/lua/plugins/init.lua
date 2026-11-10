@@ -1,7 +1,7 @@
 return {
   {
     "stevearc/conform.nvim",
-    -- event = 'BufWritePre', -- uncomment for format on save
+    event = "BufWritePre",
     opts = require "configs.conform",
   },
   {
@@ -13,7 +13,6 @@ return {
               surrounds = {
                   ["="] = {
                       add = function()
-                          local config = require("nvim-surround.config")
                           if vim.bo.filetype == "python" then
                               return { { "f\"{" }, { "=}\"" } }
                           else
@@ -34,6 +33,11 @@ return {
     "nvim-treesitter/nvim-treesitter",
     branch = "master",
     build = ":TSUpdate",
+    opts = function(_, opts)
+      vim.list_extend(opts.ensure_installed or {}, {
+        "python", "bash", "markdown", "markdown_inline", "json", "yaml", "toml",
+      })
+    end,
   },
 
   {
@@ -74,7 +78,7 @@ return {
           __inherited_from = "openai",
           endpoint = "https://openrouter.ai/api/v1",
           api_key_name = "OPENROUTER_API_KEY",
-          model = "anthropic/claude-sonnet-4",
+          model = "anthropic/claude-sonnet-5.5",
           timeout = 120000,
           extra_request_body = {
             temperature = 0,
@@ -90,14 +94,11 @@ return {
       "nvim-treesitter/nvim-treesitter",
       "nvim-lua/plenary.nvim",
       "MunifTanjim/nui.nvim",
-      --- The below dependencies are optional,
-      "echasnovski/mini.pick", -- for file_selector provider mini.pick
-      "nvim-telescope/telescope.nvim", -- for file_selector provider telescope
+      --- Optional deps: only the pickers/inputs this config actually uses
+      "nvim-telescope/telescope.nvim", -- file_selector + :OpenRouterModels picker
       "hrsh7th/nvim-cmp", -- autocompletion for avante commands and mentions
-      "ibhagwan/fzf-lua", -- for file_selector provider fzf
-      "stevearc/dressing.nvim", -- for input provider dressing
-      "folke/snacks.nvim", -- for input provider snacks
-      "nvim-tree/nvim-web-devicons", -- or echasnovski/mini.icons
+      "stevearc/dressing.nvim", -- input provider (see `input` above)
+      "nvim-tree/nvim-web-devicons",
       {
         -- support for image pasting
         "HakonHarnes/img-clip.nvim",
@@ -142,12 +143,3 @@ return {
     },
   },
 }
-  -- {
-  -- 	"nvim-treesitter/nvim-treesitter",
-  -- 	opts = {
-  -- 		ensure_installed = {
-  -- 			"vim", "lua", "vimdoc",
-  --      "html", "css"
-  -- 		},
-  -- 	},
-  -- },

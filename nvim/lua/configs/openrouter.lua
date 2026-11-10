@@ -115,7 +115,8 @@ local function filter_by_provider(models, provider)
   end
   local filtered = {}
   for _, model in ipairs(models) do
-    if model.id:match("^" .. provider .. "/") then
+    -- plain prefix test: "meta-llama" has a `-`, which is magic in Lua patterns
+    if vim.startswith(model.id, provider .. "/") then
       table.insert(filtered, model)
     end
   end
@@ -124,8 +125,7 @@ end
 
 -- Set the selected model in Avante
 local function set_avante_model(model_id)
-  local avante_ok, avante_api = pcall(require, "avante.api")
-  if not avante_ok then
+  if not pcall(require, "avante.api") then
     vim.notify("Avante not loaded", vim.log.levels.ERROR)
     return
   end
@@ -137,9 +137,7 @@ local function set_avante_model(model_id)
   end
 
   -- Also update via override if available
-  local override_ok, _ = pcall(function()
-    config.override({ providers = { openrouter = { model = model_id } } })
-  end)
+  pcall(config.override, { providers = { openrouter = { model = model_id } } })
 
   vim.notify("Avante model set to: " .. model_id, vim.log.levels.INFO)
 end

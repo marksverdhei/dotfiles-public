@@ -1,20 +1,21 @@
+local M = {}
+
 local user_command = vim.api.nvim_create_user_command
 
-function IsMapped(lhs)
-  local modes = {'n', 'v', 'i', 'c', 'x', 's', 'o', 'l', 't'}
+function M.is_mapped(lhs)
+  local modes = { "n", "v", "i", "c", "x", "s", "o", "l", "t" }
   for _, mode in ipairs(modes) do
-    local map = vim.api.nvim_get_keymap(mode)
-    for _, m in ipairs(map) do
+    for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
       if m.lhs == lhs then
         print("Mapped in mode: " .. mode)
         return
       end
     end
   end
-  print("Not custom mapped (may be built-in or unmapped)")
+  print "Not custom mapped (may be built-in or unmapped)"
 end
 
-function MdSortCheckboxes()
+function M.md_sort_checkboxes()
   local api = vim.api
   local bufnr = api.nvim_get_current_buf()
   local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -24,362 +25,285 @@ function MdSortCheckboxes()
 
   -- find the bounds of the checkbox block
   local function is_checkbox(line)
-    return line:match("^%s*[-*]?%s*%[.%]")
+    return line:match "^%s*[-*]?%s*%[.%]"
   end
 
   local start_row = row
-  while start_row > 1 and is_checkbox(lines[start_row-1]) do
+  while start_row > 1 and is_checkbox(lines[start_row - 1]) do
     start_row = start_row - 1
   end
 
   local end_row = row
-  while end_row < #lines and is_checkbox(lines[end_row+1]) do
+  while end_row < #lines and is_checkbox(lines[end_row + 1]) do
     end_row = end_row + 1
-  end
-
-  -- collect the block
-  local block = {}
-  for i = start_row, end_row do
-    table.insert(block, lines[i])
   end
 
   -- partition into unchecked and checked
   local unchecked, checked = {}, {}
-  for _, line in ipairs(block) do
-    if line:find("%[ %]") then
+  for i = start_row, end_row do
+    local line = lines[i]
+    if line:find "%[ %]" then
       table.insert(unchecked, line)
     else
       table.insert(checked, line)
     end
   end
 
-  -- rebuild and write back
   local sorted = vim.list_extend(unchecked, checked)
-  api.nvim_buf_set_lines(bufnr, start_row-1, end_row, false, sorted)
+  api.nvim_buf_set_lines(bufnr, start_row - 1, end_row, false, sorted)
 end
 
-function MdToggleCheckbox()
+function M.md_toggle_checkbox()
   local line = vim.api.nvim_get_current_line()
-  if line:find("%[ %]") then
-    line = line:gsub("%[ %]", "[x]")
-  elseif line:find("%[x%]") or line:find("%[X%]") then
-    line = line:gsub("%[x%]", "[ ]"):gsub("%[X%]", "[ ]")
+  if line:find "%[ %]" then
+    line = line:gsub("%[ %]", "[x]", 1)
+  elseif line:find "%[[xX]%]" then
+    line = line:gsub("%[[xX]%]", "[ ]", 1)
   else
     return
   end
   vim.api.nvim_set_current_line(line)
 end
 
-function OpenNearestUrl()
-  -- helper: extract first http(s):// URL from a string
-  local function extract_url(s)
-    return s:match("(https?://[%w%-_%.%?%.:/%+=&]+)")
-  end
-
-  local bufnr = vim.api.nvim_get_current_buf()
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local row, col = cursor[1], cursor[2]
-
-  -- 1) Try the WORD under cursor
-  local word = vim.fn.expand("<cWORD>")
-  local url = extract_url(word)
-  if url then
-    -- open it
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, url }, { detach = true })
-    return
-  end
-
-  -- 2) Search outward for nearest URL in buffer
-  local max_scan = 100  -- max lines to scan in each direction
-  local best = nil
-
-  for d = 0, max_scan do
-    for _, direction in ipairs({-1, 1}) do
-      local r = row + d * direction
-      if r >= 1 and r <= vim.api.nvim_buf_line_count(bufnr) then
-        local line = vim.api.nvim_buf_get_lines(bufnr, r-1, r, false)[1]
-        local found = extract_url(line)
-        if found then
-          best = found
-          break
-        end
-      end
-    end
-    if best then break end
-  end
-
-  if best then
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, best }, { detach = true })
+local function open_in_browser(url)
+  if vim.ui.open then
+    vim.ui.open(url)
   else
-    vim.notify("No URL found near cursor", vim.log.levels.WARN)
+    local opener = vim.fn.has "macunix" == 1 and "open" or "xdg-open"
+    vim.fn.jobstart({ opener, url }, { detach = true })
   end
 end
 
-function OpenHuggingFaceRepo()
-  -- helper: extract owner/model pattern from a string
-  local function extract_hf_repo(s)
-    -- Match patterns like: owner/model-name or owner/model_name
-    return s:match("([%w%-_%.]+/[%w%-_%.]+)")
+-- Find the first match of `extract` in the WORD under the cursor, otherwise in
+-- the nearest line (scanning outward up to 100 lines in each direction).
+local function find_nearest(extract)
+  local found = extract(vim.fn.expand "<cWORD>")
+  if found then
+    return found
   end
 
   local bufnr = vim.api.nvim_get_current_buf()
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local row, col = cursor[1], cursor[2]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
 
-  -- 1) Try the WORD under cursor
-  local word = vim.fn.expand("<cWORD>")
-  local repo = extract_hf_repo(word)
-  if repo then
-    -- open it
-    local url = "https://huggingface.co/" .. repo
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, url }, { detach = true })
-    return
-  end
-
-  -- 2) Search outward for nearest HF repo in buffer
-  local max_scan = 100  -- max lines to scan in each direction
-  local best = nil
-
-  for d = 0, max_scan do
-    for _, direction in ipairs({-1, 1}) do
+  for d = 0, 100 do
+    for _, direction in ipairs { -1, 1 } do
       local r = row + d * direction
-      if r >= 1 and r <= vim.api.nvim_buf_line_count(bufnr) then
-        local line = vim.api.nvim_buf_get_lines(bufnr, r-1, r, false)[1]
-        local found = extract_hf_repo(line)
+      if r >= 1 and r <= line_count then
+        local line = vim.api.nvim_buf_get_lines(bufnr, r - 1, r, false)[1]
+        found = extract(line)
         if found then
-          best = found
-          break
+          return found
         end
       end
     end
-    if best then break end
-  end
-
-  if best then
-    local url = "https://huggingface.co/" .. best
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, url }, { detach = true })
-  else
-    vim.notify("No Hugging Face repo pattern (owner/model) found near cursor", vim.log.levels.WARN)
   end
 end
 
-function OpenHuggingFaceDataset()
-  -- helper: extract owner/dataset pattern from a string
-  local function extract_hf_dataset(s)
-    -- Match patterns like: owner/dataset-name or owner/dataset_name
-    return s:match("([%w%-_%.]+/[%w%-_%.]+)")
+local function extract_url(s)
+  local url = s:match "https?://[^%s<>\"'`]+"
+  if not url then
+    return nil
   end
-
-  local bufnr = vim.api.nvim_get_current_buf()
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local row, col = cursor[1], cursor[2]
-
-  -- 1) Try the WORD under cursor
-  local word = vim.fn.expand("<cWORD>")
-  local dataset = extract_hf_dataset(word)
-  if dataset then
-    -- open it
-    local url = "https://huggingface.co/datasets/" .. dataset
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, url }, { detach = true })
-    return
+  -- drop trailing punctuation and unbalanced closing brackets, e.g. markdown `(url)`
+  url = url:gsub("[%.,;:!%?]+$", "")
+  while url:sub(-1) == ")" and select(2, url:gsub("%(", "")) < select(2, url:gsub("%)", "")) do
+    url = url:sub(1, -2)
   end
+  return url
+end
 
-  -- 2) Search outward for nearest HF dataset in buffer
-  local max_scan = 100  -- max lines to scan in each direction
-  local best = nil
+-- File extensions that mark an `a/b.ext` token as a path, not a Hub repo id.
+local path_exts = {
+  lua = true, py = true, sh = true, md = true, json = true, jsonl = true, txt = true,
+  yaml = true, yml = true, toml = true, js = true, ts = true, rs = true, go = true,
+  c = true, h = true, cpp = true, html = true, css = true, csv = true, ipynb = true,
+}
 
-  for d = 0, max_scan do
-    for _, direction in ipairs({-1, 1}) do
-      local r = row + d * direction
-      if r >= 1 and r <= vim.api.nvim_buf_line_count(bufnr) then
-        local line = vim.api.nvim_buf_get_lines(bufnr, r-1, r, false)[1]
-        local found = extract_hf_dataset(line)
-        if found then
-          best = found
-          break
-        end
+-- Match a bare `owner/name` Hugging Face id: exactly one slash, not part of a
+-- longer path or URL, and not ending in a file extension.
+local function extract_hf_id(s)
+  for token in s:gmatch "[%w%-_%./:]+" do
+    local owner, name = token:match "^([%w%-_%.]+)/([%w%-_%.]+)$"
+    if owner and not owner:match "^%.+$" then
+      local ext = name:match "%.(%w+)$"
+      if not (ext and path_exts[ext:lower()]) then
+        return owner .. "/" .. name
       end
     end
-    if best then break end
-  end
-
-  if best then
-    local url = "https://huggingface.co/datasets/" .. best
-    local opener = vim.fn.has("macunix") == 1 and "open" or "xdg-open"
-    vim.fn.jobstart({ opener, url }, { detach = true })
-  else
-    vim.notify("No Hugging Face dataset pattern (owner/dataset) found near cursor", vim.log.levels.WARN)
   end
 end
 
-function ToggleBashMultiline()
+local function open_nearest(extract, url_prefix, not_found_msg)
+  local found = find_nearest(extract)
+  if found then
+    open_in_browser(url_prefix .. found)
+  else
+    vim.notify(not_found_msg, vim.log.levels.WARN)
+  end
+end
+
+function M.open_nearest_url()
+  open_nearest(extract_url, "", "No URL found near cursor")
+end
+
+function M.open_hf_repo()
+  open_nearest(
+    extract_hf_id,
+    "https://huggingface.co/",
+    "No Hugging Face repo pattern (owner/model) found near cursor"
+  )
+end
+
+function M.open_hf_dataset()
+  open_nearest(
+    extract_hf_id,
+    "https://huggingface.co/datasets/",
+    "No Hugging Face dataset pattern (owner/dataset) found near cursor"
+  )
+end
+
+function M.toggle_bash_multiline()
   local buf = vim.api.nvim_get_current_buf()
   local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-  
+
   -- Find start of segment (while previous line ends with \)
   local start_line = cursor_line
   while start_line > 1 do
     local prev_line = vim.api.nvim_buf_get_lines(buf, start_line - 2, start_line - 1, false)[1] or ""
-    if not prev_line:match("\\%s*$") then break end
+    if not prev_line:match "\\%s*$" then
+      break
+    end
     start_line = start_line - 1
   end
-  
+
   -- Find end of segment (while current line ends with \)
   local end_line = start_line
   local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, -1, false)
   for i = 1, #lines do
     end_line = start_line + i - 1
-    if not lines[i]:match("\\%s*$") then break end
+    if not lines[i]:match "\\%s*$" then
+      break
+    end
   end
-  
-  -- Get segment lines
+
   local segment_lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
-  if #segment_lines == 0 then return end
-  
-  local segment_text = table.concat(segment_lines, "\n")
-  
-  if segment_text:find("\\") then
-    -- Collapse: remove line continuations and normalize spacing
-    local collapsed = segment_text:gsub("%s*\\%s*\n%s*", " "):gsub("%s+", " ")
-    vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, {collapsed})
-  else
-    -- Expand: add line continuations before args starting with - or --
-    local expanded = segment_text:gsub("(%s)(%-%-?%w)", " \\\n  %2")
-    local expanded_lines = vim.split(expanded, "\n")
-    vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, expanded_lines)
-  end
-end
-
--- command defs
-user_command('UcOpenNearestURL', OpenNearestUrl, {nargs=0})
-user_command('OpenHuggingFaceRepo', OpenHuggingFaceRepo, {nargs=0})
-user_command('OpenHuggingFaceDataset', OpenHuggingFaceDataset, {nargs=0})
-user_command('MdSortCheckboxes', MdSortCheckboxes, {nargs=0})
-user_command('MdToggleCheckbox', MdToggleCheckbox, {nargs=0})
-user_command('ToggleBashMultiline', ToggleBashMultiline, {nargs=0})
-user_command('Taken', function(opts)
-  IsMapped(opts.args)
-end, {nargs=1})
-
--- nvtop panel state
-local nvtop_win = nil
-local nvtop_buf = nil
-
-function ToggleNvtop()
-  -- Check if window still exists and is valid
-  if nvtop_win and vim.api.nvim_win_is_valid(nvtop_win) then
-    vim.api.nvim_win_close(nvtop_win, true)
-    nvtop_win = nil
-    nvtop_buf = nil
+  if #segment_lines == 0 then
     return
   end
 
-  -- Open a new vertical split on the right
-  vim.cmd('vsplit')
-  vim.cmd('wincmd L')  -- Move to far right
+  local segment_text = table.concat(segment_lines, "\n")
 
-  -- Set a reasonable width (e.g., 80 columns)
-  vim.cmd('vertical resize 80')
-
-  -- Open nvtop in terminal
-  vim.cmd('terminal nvtop')
-
-  -- Store the window and buffer
-  nvtop_win = vim.api.nvim_get_current_win()
-  nvtop_buf = vim.api.nvim_get_current_buf()
-
-  -- Make buffer ephemeral (deleted when window closes)
-  vim.api.nvim_buf_set_option(nvtop_buf, 'bufhidden', 'wipe')
-
-  -- Go back to previous window
-  vim.cmd('wincmd p')
+  if segment_text:find "\\" then
+    -- Collapse: remove line continuations and normalize spacing
+    local collapsed = segment_text:gsub("%s*\\%s*\n%s*", " "):gsub("%s+", " ")
+    vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, { collapsed })
+  else
+    -- Expand: add line continuations before args starting with - or --
+    local expanded = segment_text:gsub("(%s)(%-%-?%w)", " \\\n  %2")
+    vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, vim.split(expanded, "\n"))
+  end
 end
 
-user_command('ToggleNvtop', ToggleNvtop, {nargs=0})
+-- nvtop panel state
+local nvtop_win = nil
+
+function M.toggle_nvtop()
+  if nvtop_win and vim.api.nvim_win_is_valid(nvtop_win) then
+    vim.api.nvim_win_close(nvtop_win, true)
+    nvtop_win = nil
+    return
+  end
+
+  -- Open nvtop in an 80-column split on the far right
+  vim.cmd "vsplit"
+  vim.cmd "wincmd L"
+  vim.cmd "vertical resize 80"
+  vim.cmd "terminal nvtop"
+
+  nvtop_win = vim.api.nvim_get_current_win()
+  -- Make buffer ephemeral (deleted when window closes)
+  vim.bo.bufhidden = "wipe"
+
+  vim.cmd "wincmd p"
+end
 
 -- nvim-tree width toggle state
 local nvimtree_expanded = false
 local default_width = 30
 
-function ToggleNvimTreeWidth()
-  local api = require('nvim-tree.api')
-
-  -- Check if nvim-tree is open
-  local view = require('nvim-tree.view')
+function M.toggle_nvimtree_width()
+  local api = require "nvim-tree.api"
+  local view = require "nvim-tree.view"
   if not view.is_visible() then
     vim.notify("NvimTree is not open", vim.log.levels.WARN)
     return
   end
 
   if nvimtree_expanded then
-    -- Collapse back to default width
-    api.tree.resize({ absolute = default_width })
+    api.tree.resize { absolute = default_width }
     nvimtree_expanded = false
     vim.notify("NvimTree: Reset to default width", vim.log.levels.INFO)
-  else
-    -- Expand to fit longest line
-    local bufnr = view.get_bufnr()
-    if not bufnr then return end
-
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local max_len = default_width
-
-    for _, line in ipairs(lines) do
-      -- Strip ANSI codes and calculate display width
-      local display_line = line:gsub('\27%[[0-9;]*m', '')
-      local len = vim.fn.strdisplaywidth(display_line)
-      if len > max_len then
-        max_len = len
-      end
-    end
-
-    -- Add some padding
-    local new_width = max_len + 2
-
-    api.tree.resize({ absolute = new_width })
-    nvimtree_expanded = true
-    vim.notify("NvimTree: Expanded to " .. new_width, vim.log.levels.INFO)
+    return
   end
-end
 
-user_command('ToggleNvimTreeWidth', ToggleNvimTreeWidth, {nargs=0})
+  -- Expand to fit longest line
+  local bufnr = view.get_bufnr()
+  if not bufnr then
+    return
+  end
+
+  local max_len = default_width
+  for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    max_len = math.max(max_len, vim.fn.strdisplaywidth(line))
+  end
+
+  local new_width = max_len + 2
+  api.tree.resize { absolute = new_width }
+  nvimtree_expanded = true
+  vim.notify("NvimTree: Expanded to " .. new_width, vim.log.levels.INFO)
+end
 
 -- Workspace preset: File tree + terminal with lumi
-function WorkspaceLumi()
-  -- Open file tree
-  vim.cmd('NvimTreeOpen')
-
-  -- Create vsplit and open terminal
-  vim.cmd('vsplit')
-  vim.cmd('terminal')
-
-  -- Run lumi command in the terminal
-  vim.api.nvim_chan_send(vim.bo.channel, 'lumi\n')
-
-  -- Go back to the left window (file tree area)
-  vim.cmd('wincmd h')
+function M.workspace_lumi()
+  vim.cmd "NvimTreeOpen"
+  vim.cmd "vsplit"
+  vim.cmd "terminal"
+  vim.api.nvim_chan_send(vim.bo.channel, "lumi\n")
+  vim.cmd "wincmd h"
 end
 
-user_command('WorkspaceLumi', WorkspaceLumi, {nargs=0})
-
 -- ANSI pixel art renderer
-local ansi_rendered_bufs = {}
-local ansi_ns = vim.api.nvim_create_namespace("ansi_render")
+local ansi_ns = vim.api.nvim_create_namespace "ansi_render"
 
-function ToggleAnsi()
+local function utf8_len(byte)
+  if byte >= 0xF0 then
+    return 4
+  elseif byte >= 0xE0 then
+    return 3
+  elseif byte >= 0xC0 then
+    return 2
+  end
+  return 1
+end
+
+function M.toggle_ansi()
   local bufnr = vim.api.nvim_get_current_buf()
 
-  if ansi_rendered_bufs[bufnr] then
+  if vim.b[bufnr].ansi_rendered then
     -- Toggle OFF: reload file from disk to restore raw escape codes
     vim.api.nvim_buf_clear_namespace(bufnr, ansi_ns, 0, -1)
-    vim.cmd('edit!')
-    ansi_rendered_bufs[bufnr] = nil
+    vim.bo[bufnr].modifiable = true
+    vim.bo[bufnr].readonly = false
+    vim.b[bufnr].ansi_raw = true
+    vim.cmd "edit!"
+    vim.b[bufnr].ansi_rendered = nil
     vim.notify("ANSI rendering OFF", vim.log.levels.INFO)
+    return
+  end
+
+  if vim.bo[bufnr].modified then
+    vim.notify("ToggleAnsi: save or discard your changes first", vim.log.levels.WARN)
     return
   end
 
@@ -390,7 +314,8 @@ function ToggleAnsi()
   local hl_groups = {}
 
   for i, line in ipairs(lines) do
-    local clean = ""
+    local parts = {}
+    local clean_len = 0
     local current_fg = nil
     local pos = 1
 
@@ -402,24 +327,18 @@ function ToggleAnsi()
         if code == "0" or code == "" then
           current_fg = nil
         else
-          local r, g, b = code:match("38;2;(%d+);(%d+);(%d+)")
+          local r, g, b = code:match "38;2;(%d+);(%d+);(%d+)"
           if r then
             current_fg = string.format("#%02x%02x%02x", tonumber(r), tonumber(g), tonumber(b))
           end
         end
         pos = esc_end + 1
       else
-        -- Read one UTF-8 character
-        local byte = line:byte(pos)
-        local char_len = 1
-        if byte >= 0xF0 then char_len = 4
-        elseif byte >= 0xE0 then char_len = 3
-        elseif byte >= 0xC0 then char_len = 2
-        end
+        local char_len = utf8_len(line:byte(pos))
         local char = line:sub(pos, pos + char_len - 1)
-
-        local byte_start = #clean
-        clean = clean .. char
+        local byte_start = clean_len
+        parts[#parts + 1] = char
+        clean_len = clean_len + #char
 
         if current_fg then
           local hl_name = "Ansi_" .. current_fg:sub(2)
@@ -427,20 +346,19 @@ function ToggleAnsi()
             vim.api.nvim_set_hl(0, hl_name, { fg = current_fg })
             hl_groups[hl_name] = true
           end
-          table.insert(marks, { i - 1, byte_start, #clean, hl_name })
+          table.insert(marks, { i - 1, byte_start, clean_len, hl_name })
         end
 
         pos = pos + char_len
       end
     end
 
-    table.insert(clean_lines, clean)
+    table.insert(clean_lines, table.concat(parts))
   end
 
   -- Replace buffer with clean text (escape codes stripped)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clean_lines)
 
-  -- Apply color extmarks
   for _, m in ipairs(marks) do
     vim.api.nvim_buf_set_extmark(bufnr, ansi_ns, m[1], m[2], {
       end_col = m[3],
@@ -448,9 +366,29 @@ function ToggleAnsi()
     })
   end
 
+  -- The buffer now holds stripped text; lock it so a stray :w can't write it
+  -- over the original escape codes. Toggling off reloads from disk.
   vim.bo[bufnr].modified = false
-  ansi_rendered_bufs[bufnr] = true
+  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].readonly = true
+  vim.b[bufnr].ansi_rendered = true
+  vim.b[bufnr].ansi_raw = nil
   vim.notify("ANSI rendering ON", vim.log.levels.INFO)
 end
 
-user_command('ToggleAnsi', ToggleAnsi, {nargs=0})
+-- command defs
+user_command("UcOpenNearestURL", M.open_nearest_url, { nargs = 0 })
+user_command("OpenHuggingFaceRepo", M.open_hf_repo, { nargs = 0 })
+user_command("OpenHuggingFaceDataset", M.open_hf_dataset, { nargs = 0 })
+user_command("MdSortCheckboxes", M.md_sort_checkboxes, { nargs = 0 })
+user_command("MdToggleCheckbox", M.md_toggle_checkbox, { nargs = 0 })
+user_command("ToggleBashMultiline", M.toggle_bash_multiline, { nargs = 0 })
+user_command("Taken", function(opts)
+  M.is_mapped(opts.args)
+end, { nargs = 1 })
+user_command("ToggleNvtop", M.toggle_nvtop, { nargs = 0 })
+user_command("ToggleNvimTreeWidth", M.toggle_nvimtree_width, { nargs = 0 })
+user_command("WorkspaceLumi", M.workspace_lumi, { nargs = 0 })
+user_command("ToggleAnsi", M.toggle_ansi, { nargs = 0 })
+
+return M
