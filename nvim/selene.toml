@@ -1,0 +1,5 @@
+std = "vim"
+
+[lints]
+# lazy.nvim plugin specs and keymap specs are mixed tables by design.
+mixed_table = "allow"

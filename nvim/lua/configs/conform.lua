@@ -7,8 +7,8 @@ local options = {
     -- html = { "prettier" },
   },
 
-  -- Formatters that aren't installed are skipped quietly (install them with
-  -- :MasonInstall stylua ruff shfmt). Toggle with :FormatToggle, or
+  -- Formatters are installed by mason-tool-installer (plugins/init.lua); any
+  -- that are missing are skipped quietly. Toggle with :FormatToggle, or
   -- :FormatToggle! for the current buffer only.
   notify_no_formatters = false,
   format_on_save = function(bufnr)

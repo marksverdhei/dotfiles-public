@@ -5,16 +5,19 @@ local autocmd = vim.api.nvim_create_autocmd
 autocmd("BufWritePost", {
   pattern = "lua/mappings.lua",
   callback = function()
-    dofile(vim.fn.stdpath("config") .. "/lua/mappings.lua")
+    dofile(vim.fn.stdpath "config" .. "/lua/mappings.lua")
     vim.notify("Reloaded mappings.lua", vim.log.levels.INFO)
   end,
 })
--- if Neovim was launched with no file arguments...
 autocmd("VimEnter", {
   callback = function()
+    -- Load every base46 integration (tabufline, nvim-tree, cmp, treesitter, ...).
+    -- init.lua only loads `defaults` and `statusline`; without this, those
+    -- groups stay empty until a theme switch.
     require("base46").load_all_highlights()
+    -- if Neovim was launched with no file arguments...
     if vim.fn.argc() == 0 then
-      vim.cmd("terminal")
+      vim.cmd "terminal"
     end
   end,
 })

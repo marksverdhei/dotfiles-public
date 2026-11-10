@@ -6,4 +6,4 @@ require "nvchad.options"
 -- o.cursorlineopt ='both' -- to enable cursorline!
 
 -- Configure LuaSnip to load custom snippets
-vim.g.lua_snippets_path = vim.fn.stdpath("config") .. "/lua/snippets"
+vim.g.lua_snippets_path = vim.fn.stdpath "config" .. "/lua/snippets"

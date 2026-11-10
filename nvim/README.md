@@ -15,7 +15,7 @@ This Neovim configuration is based on [NvChad v2.5](https://github.com/NvChad/Nv
 ## Basic Settings
 
 ### Leader Key
-- **Leader**: `<Space>` (set in `init.lua:2`)
+- **Leader**: `<Space>` (set in `init.lua`)
 
 ### Line Numbers
 - **Absolute number** on current line
@@ -131,7 +131,7 @@ Custom plugins beyond the default NvChad setup:
 ### Formatting & Editing
 
 **[conform.nvim](https://github.com/stevearc/conform.nvim)** - Code formatting
-- Configured formatters (skipped quietly when not installed — `:MasonInstall stylua ruff shfmt`):
+- Configured formatters (installed automatically, see [Tooling](#tooling); missing ones are skipped quietly):
   - Lua: `stylua`
   - Python: `ruff_organize_imports`, `ruff_format`
   - Shell: `shfmt`
@@ -141,16 +141,16 @@ Custom plugins beyond the default NvChad setup:
 **[nvim-surround](https://github.com/kylechui/nvim-surround)** - Add/change/delete surrounding delimiters
 - Version: `^3.0.0`
 - Custom surround for Python f-strings: `s=` → `f"{...=}"`
-- Location: `lua/plugins/init.lua:8-27`
+- Location: `lua/plugins/init.lua`
 
 **[nvim-toggler](https://github.com/nguyenvukhang/nvim-toggler)** - Toggle between common values (true/false, etc.)
-- Location: `lua/plugins/init.lua:40-45`
+- Location: `lua/plugins/init.lua`
 
 ### Navigation
 
 **[vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator)** - Seamless navigation between Tmux and Vim
 - Loaded eagerly (`lazy = false`)
-- Location: `lua/plugins/init.lua:36-38`
+- Location: `lua/plugins/init.lua`
 
 ### AI Assistants
 
@@ -159,15 +159,21 @@ Custom plugins beyond the default NvChad setup:
 - Model: `anthropic/claude-sonnet-5.5`
 - Build: `make` (compiled from source)
 - Dependencies: treesitter, plenary, nui, telescope, nvim-cmp, dressing, img-clip, render-markdown
-- Location: `lua/plugins/init.lua:47-116`
+- Location: `lua/plugins/init.lua`
 
-**[copilot.vim](https://github.com/github/copilot.vim)** - GitHub Copilot integration
-- Installed via pack system: `pack/github/start/copilot.vim`
+### Tooling
 
-**[CopilotChat.nvim](https://github.com/CopilotC-Nvim/CopilotChat.nvim)** - Copilot chat interface
-- Auto-completion disabled for `@` and `/` (set to empty string)
-- Build: `make tiktoken`
-- Location: `lua/plugins/copilot_chat.lua`
+**[mason-tool-installer.nvim](https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim)** - Installs the toolchain through Mason on startup:
+lua-language-server, pyright, ruff, bash-language-server, marksman, stylua, shfmt, shellcheck, debugpy.
+- `:MasonToolsUpdate` updates them; a fresh machine only needs `node`/`npm` (for pyright and bash-language-server) and the `tree-sitter` CLI (for parsers)
+
+**[nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)** (`main` branch) - Parser installer. Highlighting is started per buffer by NvChad (`vim.treesitter.start`).
+- Extra parsers: python, bash, markdown, markdown_inline, json, yaml, toml
+
+**[lazydev.nvim](https://github.com/folke/lazydev.nvim)** - Makes lua_ls aware of the Neovim API, plugins and this config's modules (also a completion source)
+
+**[nvim-dap](https://github.com/mfussenegger/nvim-dap)** + **[nvim-dap-python](https://github.com/mfussenegger/nvim-dap-python)** - Python debugging with Mason's `debugpy`
+- Commands: `:DapToggleBreakpoint`, `:DapContinue`, `:DapNew`, `:DapToggleRepl`
 
 ### LSP
 
@@ -224,7 +230,7 @@ All custom user commands defined in `cmds.lua` (functions live on the module ret
 
 ## LSP Servers
 
-Configured LSP servers (`lua/configs/lspconfig.lua:3`):
+Configured LSP servers (`lua/configs/lspconfig.lua`, plus `lua_ls` from NvChad):
 
 - **html** - HTML language server
 - **cssls** - CSS language server
@@ -322,7 +328,7 @@ Set `NVIM_THEME=hei` or `NVIM_THEME=hai` to start in either custom theme.
 - **NvDash**: Disabled on startup (`load_on_startup = false`)
 - **Theme Toggle**: Base46's button switches dark/light; `:ThemeCycle` includes mid
 
-Location: `lua/chadrc.lua`
+Location: `lua/_chadrc.lua` (copied to `lua/chadrc.lua` by bootstrap)
 
 ## File Structure
 
@@ -333,22 +339,36 @@ nvim/
 ├── lua/
 │   ├── options.lua         # Custom options (snippet path)
 │   ├── mappings.lua        # All custom keybindings
-│   ├── cmds.lua            # Custom commands and functions
+│   ├── cmds.lua            # User command registration
+│   ├── features/           # Command implementations (openers, markdown, shell, ansi, panels)
 │   ├── autocmds.lua        # Custom autocommands
-│   ├── chadrc.lua          # NvChad configuration (theme, etc.)
+│   ├── _chadrc.lua         # NvChad config template (bootstrap copies it to chadrc.lua, which is gitignored)
 │   ├── configs/
 │   │   ├── conform.lua     # Formatter configuration
 │   │   ├── lspconfig.lua   # LSP server configuration
+│   │   ├── openrouter.lua  # OpenRouter model picker for Avante
 │   │   └── lazy.lua        # Lazy.nvim configuration
 │   ├── plugins/
-│   │   ├── init.lua        # Main plugin definitions
-│   │   └── copilot_chat.lua # CopilotChat plugin config
+│   │   └── init.lua        # Plugin definitions
+│   ├── theme/              # :Theme/:ThemeMid/:ThemeCycle and mid-theme blending
+│   ├── themes/             # Custom base46 themes (hei, hai, *_mid)
 │   └── snippets/
 │       └── python.lua      # Python snippets (hfload)
-└── pack/
-    └── github/start/
-        └── copilot.vim/    # GitHub Copilot
+├── tests/run.lua           # Unit tests for features/ and theme/
+├── .stylua.toml, selene.toml, vim.yml  # Formatter / linter config
+└── pack/                   # Optional hand-installed plugins (gitignored)
 ```
+
+## Development
+
+```sh
+cd nvim
+stylua --check .        # formatting
+selene .                # lint
+nvim -l tests/run.lua   # unit tests
+```
+
+CI for these checks lives in `.github/workflows/nvim.yml` (added separately; pushing workflow files needs the `workflow` token scope).
 
 ## Notes
 

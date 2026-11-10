@@ -26,4 +26,4 @@ if #enabled > 0 then
   vim.lsp.enable(enabled)
 end
 
--- read :h vim.lsp.config for changing options of lsp servers 
+-- read :h vim.lsp.config for changing options of lsp servers

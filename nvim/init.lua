@@ -1,7 +1,7 @@
 vim.g.base46_cache = vim.fn.stdpath "data" .. "/base46/"
 vim.g.mapleader = " "
-vim.o.number = true            -- absolute number on the current line
-vim.o.relativenumber = true    -- relative numbers on the others
+vim.o.number = true -- absolute number on the current line
+vim.o.relativenumber = true -- relative numbers on the others
 
 -- bootstrap lazy and all plugins
 local lazypath = vim.fn.stdpath "data" .. "/lazy/lazy.nvim"
@@ -12,11 +12,6 @@ if not vim.uv.fs_stat(lazypath) then
 end
 
 vim.opt.rtp:prepend(lazypath)
-
--- Restore the `all = false` treesitter shim that Neovim 0.12 dropped, so the
--- archived nvim-treesitter master branch stops crashing on list-form matches.
--- Must run before lazy loads nvim-treesitter (which registers the handlers).
-require "configs.ts_compat"
 
 local lazy_config = require "configs.lazy"
 
