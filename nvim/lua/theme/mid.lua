@@ -151,6 +151,10 @@ function M.between(dark_name, light_name, mid_name)
   return require("base46").override_theme(theme, mid_name)
 end
 
+-- Exposed for tests.
+M._blend = blend
+M._contrast = contrast
+
 function M.for_theme(name)
   for _, pair in ipairs(M.pairs) do
     if name == pair.family or name == pair.dark or name == pair.light or name == pair.mid then

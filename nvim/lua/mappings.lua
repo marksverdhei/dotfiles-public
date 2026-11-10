@@ -1,6 +1,7 @@
 require "nvchad.mappings"
 
 local map = vim.keymap.set
+local cmds = require "cmds"
 
 map("n", ";", ":", { desc = "CMD enter command mode" })
 map("i", "jk", "<ESC>")
@@ -21,35 +22,40 @@ map("t", "<C-l>", "<C-\\><C-n><cmd>TmuxNavigateRight<CR>", { desc = "Window Righ
 map("t", "<C-j>", "<C-\\><C-n><cmd>TmuxNavigateDown<CR>", { desc = "Window Down" })
 map("t", "<C-k>", "<C-\\><C-n><cmd>TmuxNavigateUp<CR>", { desc = "Window Up" })
 
-map('v', 'A', '<ESC>GVgg', { desc = 'Mark entire file'})
-map('v', 'yA', '<ESC><cmd>%yank<CR>', { desc = 'Yank entire file without moving the cursor.' })
+map("v", "A", "<ESC>GVgg", { desc = "Mark entire file" })
+map("v", "yA", "<ESC><cmd>%yank<CR>", { desc = "Yank entire file without moving the cursor." })
 
-map('n', 'gp', '"_ddP', { desc = 'Replace line with yanked content' })
+map("n", "gp", '"_ddP', { desc = "Replace line with yanked content" })
 
-map('n', 'vv', 'V', { desc = 'Start linewise visual mode' })
+map("n", "vv", "V", { desc = "Start linewise visual mode" })
 
-map('n', '<leader>c', ':MdToggleCheckbox<CR>', { noremap = true, silent = true })
+map("n", "<leader>c", ":MdToggleCheckbox<CR>", { noremap = true, silent = true })
 
-map("n", "<leader>u", OpenNearestUrl, {
+map("n", "<leader>u", cmds.open_nearest_url, {
   noremap = true,
   silent = true,
   desc = "Open URL under or nearest cursor in default browser",
 })
 
-map("n", "<leader>dh", OpenHuggingFaceRepo, {
+map("n", "<leader>dh", cmds.open_hf_repo, {
   noremap = true,
   silent = true,
   desc = "Open Hugging Face repo (owner/model) in browser",
 })
 
-map("n", "<leader>da", OpenHuggingFaceDataset, {
+map("n", "<leader>da", cmds.open_hf_dataset, {
   noremap = true,
   silent = true,
   desc = "Open Hugging Face dataset (owner/dataset) in browser",
 })
 
-map('n', '<leader>ms', MdSortCheckboxes, { noremap = true, silent = true, desc = "Sort markdown checkboxes: unchecked up, checked down" })
-map('n', '<leader>ml', ToggleBashMultiline, { silent = true, desc = "Collapse or expand bash multi-line." })
+map(
+  "n",
+  "<leader>ms",
+  cmds.md_sort_checkboxes,
+  { noremap = true, silent = true, desc = "Sort markdown checkboxes: unchecked up, checked down" }
+)
+map("n", "<leader>ml", cmds.toggle_bash_multiline, { silent = true, desc = "Collapse or expand bash multi-line." })
 
 -- Move current line
 map("n", "<A-k>", ":m .-2<CR>==", { silent = true })
@@ -64,13 +70,13 @@ map("v", "<A-j>", ":m '>+1<CR>gv=gv", { silent = true })
 map("v", "<A-k>", ":m '<-2<CR>gv=gv", { silent = true })
 
 -- Visual-mode (any Visual type)
-map('x', '<leader>s', ":'<,'>sort<CR>",  { desc = 'Sort selected lines' })
-map('x', '<leader>S', ":'<,'>sort!<CR>", { desc = 'Sort selected lines (desc)' })
+map("x", "<leader>s", ":'<,'>sort<CR>", { desc = "Sort selected lines" })
+map("x", "<leader>S", ":'<,'>sort!<CR>", { desc = "Sort selected lines (desc)" })
 
-map("n", "<leader>te", ":Telescope<CR>", { desc = 'Open telescope'})
-map("n", "<leader>tc", ":Telescope keymaps<CR>", { desc = 'Open telescope'})
+map("n", "<leader>te", ":Telescope<CR>", { desc = "Open telescope" })
+map("n", "<leader>tc", ":Telescope keymaps<CR>", { desc = "Open telescope" })
 
-map("n", "<A-w>", ToggleNvimTreeWidth, { desc = 'Toggle NvimTree width (expand to fit longest name)' })
+map("n", "<A-w>", cmds.toggle_nvimtree_width, { desc = "Toggle NvimTree width (expand to fit longest name)" })
 
 -- Avante AI keybindings
 map("n", "<leader>aa", "<cmd>AvanteAsk<CR>", { desc = "Avante: Ask" })

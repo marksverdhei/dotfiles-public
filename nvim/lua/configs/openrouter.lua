@@ -3,7 +3,7 @@
 
 local M = {}
 
-local cache_file = vim.fn.stdpath("cache") .. "/openrouter_models.json"
+local cache_file = vim.fn.stdpath "cache" .. "/openrouter_models.json"
 local cache_max_age = 3600 -- 1 hour in seconds
 
 -- Popular providers to show as filter categories
@@ -21,11 +21,13 @@ M.providers = {
 
 -- Fetch models from OpenRouter API
 local function fetch_models(callback)
-  local api_key = os.getenv("OPENROUTER_API_KEY")
+  local api_key = os.getenv "OPENROUTER_API_KEY"
   local curl_cmd = {
-    "curl", "-s",
+    "curl",
+    "-s",
     "https://openrouter.ai/api/v1/models",
-    "-H", "Content-Type: application/json",
+    "-H",
+    "Content-Type: application/json",
   }
   if api_key then
     table.insert(curl_cmd, "-H")
@@ -70,7 +72,7 @@ function M.get_models(callback, force_refresh)
   if not force_refresh then
     local f = io.open(cache_file, "r")
     if f then
-      local content = f:read("*a")
+      local content = f:read "*a"
       f:close()
       local ok, cache_data = pcall(vim.json.decode, content)
       if ok and cache_data and cache_data.models then
@@ -115,7 +117,8 @@ local function filter_by_provider(models, provider)
   end
   local filtered = {}
   for _, model in ipairs(models) do
-    if model.id:match("^" .. provider .. "/") then
+    -- plain prefix test: "meta-llama" has a `-`, which is magic in Lua patterns
+    if vim.startswith(model.id, provider .. "/") then
       table.insert(filtered, model)
     end
   end
@@ -124,22 +127,19 @@ end
 
 -- Set the selected model in Avante
 local function set_avante_model(model_id)
-  local avante_ok, avante_api = pcall(require, "avante.api")
-  if not avante_ok then
+  if not pcall(require, "avante.api") then
     vim.notify("Avante not loaded", vim.log.levels.ERROR)
     return
   end
 
   -- Update the openrouter provider model
-  local config = require("avante.config")
+  local config = require "avante.config"
   if config.options and config.options.providers and config.options.providers.openrouter then
     config.options.providers.openrouter.model = model_id
   end
 
   -- Also update via override if available
-  local override_ok, _ = pcall(function()
-    config.override({ providers = { openrouter = { model = model_id } } })
-  end)
+  pcall(config.override, { providers = { openrouter = { model = model_id } } })
 
   vim.notify("Avante model set to: " .. model_id, vim.log.levels.INFO)
 end
@@ -188,11 +188,11 @@ function M.pick_provider_then_model(opts)
     prompt = "Filter by provider:",
   }, function(choice)
     if choice then
-      local provider = choice:match("^(%S+)")
+      local provider = choice:match "^(%S+)"
       if provider == "all" then
         provider = nil
       end
-      M.pick_model({ provider = provider, refresh = opts.refresh })
+      M.pick_model { provider = provider, refresh = opts.refresh }
     end
   end)
 end
@@ -208,73 +208,75 @@ function M.telescope_pick(opts)
     return
   end
 
-  local pickers = require("telescope.pickers")
-  local finders = require("telescope.finders")
+  local pickers = require "telescope.pickers"
+  local finders = require "telescope.finders"
   local conf = require("telescope.config").values
-  local actions = require("telescope.actions")
-  local action_state = require("telescope.actions.state")
-  local previewers = require("telescope.previewers")
+  local actions = require "telescope.actions"
+  local action_state = require "telescope.actions.state"
+  local previewers = require "telescope.previewers"
 
   M.get_models(function(models)
     table.sort(models, function(a, b)
       return a.id < b.id
     end)
 
-    pickers.new(opts, {
-      prompt_title = "OpenRouter Models (type to filter)",
-      finder = finders.new_table({
-        results = models,
-        entry_maker = function(model)
-          return {
-            value = model,
-            display = format_model(model),
-            ordinal = model.id .. " " .. (model.name or ""),
-          }
-        end,
-      }),
-      sorter = conf.generic_sorter(opts),
-      previewer = previewers.new_buffer_previewer({
-        title = "Model Details",
-        define_preview = function(self, entry)
-          local model = entry.value
-          local lines = {
-            "ID: " .. model.id,
-            "Name: " .. (model.name or "N/A"),
-            "",
-            "Context: " .. tostring(model.context_length or "N/A") .. " tokens",
-            "",
-            "Pricing (per 1M tokens):",
-          }
-          local pricing = model.pricing or {}
-          local prompt_cost = (tonumber(pricing.prompt) or 0) * 1000000
-          local completion_cost = (tonumber(pricing.completion) or 0) * 1000000
-          if prompt_cost == 0 and completion_cost == 0 then
-            table.insert(lines, "  FREE")
-          else
-            table.insert(lines, string.format("  Input:  $%.4f", prompt_cost))
-            table.insert(lines, string.format("  Output: $%.4f", completion_cost))
-          end
-          table.insert(lines, "")
-          if model.description then
-            table.insert(lines, "Description:")
-            for line in model.description:gmatch("[^\n]+") do
-              table.insert(lines, "  " .. line)
+    pickers
+      .new(opts, {
+        prompt_title = "OpenRouter Models (type to filter)",
+        finder = finders.new_table {
+          results = models,
+          entry_maker = function(model)
+            return {
+              value = model,
+              display = format_model(model),
+              ordinal = model.id .. " " .. (model.name or ""),
+            }
+          end,
+        },
+        sorter = conf.generic_sorter(opts),
+        previewer = previewers.new_buffer_previewer {
+          title = "Model Details",
+          define_preview = function(self, entry)
+            local model = entry.value
+            local lines = {
+              "ID: " .. model.id,
+              "Name: " .. (model.name or "N/A"),
+              "",
+              "Context: " .. tostring(model.context_length or "N/A") .. " tokens",
+              "",
+              "Pricing (per 1M tokens):",
+            }
+            local pricing = model.pricing or {}
+            local prompt_cost = (tonumber(pricing.prompt) or 0) * 1000000
+            local completion_cost = (tonumber(pricing.completion) or 0) * 1000000
+            if prompt_cost == 0 and completion_cost == 0 then
+              table.insert(lines, "  FREE")
+            else
+              table.insert(lines, string.format("  Input:  $%.4f", prompt_cost))
+              table.insert(lines, string.format("  Output: $%.4f", completion_cost))
             end
-          end
-          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+            table.insert(lines, "")
+            if model.description then
+              table.insert(lines, "Description:")
+              for line in model.description:gmatch "[^\n]+" do
+                table.insert(lines, "  " .. line)
+              end
+            end
+            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+          end,
+        },
+        attach_mappings = function(prompt_bufnr)
+          actions.select_default:replace(function()
+            local selection = action_state.get_selected_entry()
+            actions.close(prompt_bufnr)
+            if selection then
+              set_avante_model(selection.value.id)
+            end
+          end)
+          return true
         end,
-      }),
-      attach_mappings = function(prompt_bufnr, map)
-        actions.select_default:replace(function()
-          local selection = action_state.get_selected_entry()
-          actions.close(prompt_bufnr)
-          if selection then
-            set_avante_model(selection.value.id)
-          end
-        end)
-        return true
-      end,
-    }):find()
+      })
+      :find()
   end, opts.refresh)
 end
 
@@ -282,8 +284,8 @@ end
 function M.setup()
   vim.api.nvim_create_user_command("OpenRouterModels", function(cmd_opts)
     local args = cmd_opts.args or ""
-    local refresh = args:match("refresh") ~= nil
-    M.telescope_pick({ refresh = refresh })
+    local refresh = args:match "refresh" ~= nil
+    M.telescope_pick { refresh = refresh }
   end, {
     nargs = "?",
     complete = function()

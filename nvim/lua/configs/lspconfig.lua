@@ -12,6 +12,8 @@ local servers = {
   cssls = "vscode-css-language-server",
   pyright = "pyright-langserver",
   marksman = "marksman",
+  ruff = "ruff",
+  bashls = "bash-language-server",
 }
 
 local enabled = {}
@@ -24,4 +26,4 @@ if #enabled > 0 then
   vim.lsp.enable(enabled)
 end
 
--- read :h vim.lsp.config for changing options of lsp servers 
+-- read :h vim.lsp.config for changing options of lsp servers

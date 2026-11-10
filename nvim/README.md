@@ -15,7 +15,7 @@ This Neovim configuration is based on [NvChad v2.5](https://github.com/NvChad/Nv
 ## Basic Settings
 
 ### Leader Key
-- **Leader**: `<Space>` (set in `init.lua:2`)
+- **Leader**: `<Space>` (set in `init.lua`)
 
 ### Line Numbers
 - **Absolute number** on current line
@@ -83,21 +83,21 @@ Move lines up/down in any mode:
 | Key | Action | Description |
 |-----|--------|-------------|
 | `<leader>c` | `:MdToggleCheckbox<CR>` | Toggle checkbox `[ ]` ↔ `[x]` |
-| `<leader>ms` | `MdSortCheckboxes` | Sort checkboxes: unchecked up, checked down |
+| `<leader>ms` | `md_sort_checkboxes` | Sort checkboxes: unchecked up, checked down |
 
 ### Bash/Command Utilities
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<leader>ml` | `ToggleBashMultiline` | Collapse/expand bash multi-line commands |
+| `<leader>ml` | `toggle_bash_multiline` | Collapse/expand bash multi-line commands |
 
 ### URL & HuggingFace Utilities
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<leader>u` | `OpenNearestUrl` | Open URL under/nearest cursor in browser |
-| `<leader>dh` | `OpenHuggingFaceRepo` | Open HuggingFace repo (owner/model) in browser |
-| `<leader>da` | `OpenHuggingFaceDataset` | Open HuggingFace dataset (owner/dataset) in browser |
+| `<leader>u` | `open_nearest_url` | Open URL under/nearest cursor in browser |
+| `<leader>dh` | `open_hf_repo` | Open HuggingFace repo (owner/model) in browser |
+| `<leader>da` | `open_hf_dataset` | Open HuggingFace dataset (owner/dataset) in browser |
 
 ### AI/Copilot
 
@@ -116,7 +116,7 @@ Move lines up/down in any mode:
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<A-w>` | `ToggleNvimTreeWidth` | Toggle width (expand to fit longest name) |
+| `<A-w>` | `toggle_nvimtree_width` | Toggle width (expand to fit longest name) |
 
 ### System Monitoring
 
@@ -131,40 +131,49 @@ Custom plugins beyond the default NvChad setup:
 ### Formatting & Editing
 
 **[conform.nvim](https://github.com/stevearc/conform.nvim)** - Code formatting
-- Configured formatters:
+- Configured formatters (installed automatically, see [Tooling](#tooling); missing ones are skipped quietly):
   - Lua: `stylua`
+  - Python: `ruff_organize_imports`, `ruff_format`
+  - Shell: `shfmt`
+- Format on save is on; `:FormatToggle` toggles it globally, `:FormatToggle!` for the current buffer
 - Location: `lua/configs/conform.lua`
 
 **[nvim-surround](https://github.com/kylechui/nvim-surround)** - Add/change/delete surrounding delimiters
 - Version: `^3.0.0`
 - Custom surround for Python f-strings: `s=` → `f"{...=}"`
-- Location: `lua/plugins/init.lua:8-27`
+- Location: `lua/plugins/init.lua`
 
 **[nvim-toggler](https://github.com/nguyenvukhang/nvim-toggler)** - Toggle between common values (true/false, etc.)
-- Location: `lua/plugins/init.lua:40-45`
+- Location: `lua/plugins/init.lua`
 
 ### Navigation
 
 **[vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator)** - Seamless navigation between Tmux and Vim
 - Loaded eagerly (`lazy = false`)
-- Location: `lua/plugins/init.lua:36-38`
+- Location: `lua/plugins/init.lua`
 
 ### AI Assistants
 
 **[avante.nvim](https://github.com/yetone/avante.nvim)** - AI-powered coding assistant
-- Provider: Claude (default), with OpenRouter support
-- Model: `claude-sonnet-4.5`
+- Provider: OpenRouter (`:OpenRouterModels` to switch model)
+- Model: `anthropic/claude-sonnet-5.5`
 - Build: `make` (compiled from source)
-- Dependencies: treesitter, plenary, nui, img-clip, render-markdown
-- Location: `lua/plugins/init.lua:47-116`
+- Dependencies: treesitter, plenary, nui, telescope, nvim-cmp, dressing, img-clip, render-markdown
+- Location: `lua/plugins/init.lua`
 
-**[copilot.vim](https://github.com/github/copilot.vim)** - GitHub Copilot integration
-- Installed via pack system: `pack/github/start/copilot.vim`
+### Tooling
 
-**[CopilotChat.nvim](https://github.com/CopilotC-Nvim/CopilotChat.nvim)** - Copilot chat interface
-- Auto-completion disabled for `@` and `/` (set to empty string)
-- Build: `make tiktoken`
-- Location: `lua/plugins/copilot_chat.lua`
+**[mason-tool-installer.nvim](https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim)** - Installs the toolchain through Mason on startup:
+lua-language-server, pyright, ruff, bash-language-server, marksman, stylua, shfmt, shellcheck, debugpy.
+- `:MasonToolsUpdate` updates them; a fresh machine only needs `node`/`npm` (for pyright and bash-language-server) and the `tree-sitter` CLI (for parsers)
+
+**[nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)** (`main` branch) - Parser installer. Highlighting is started per buffer by NvChad (`vim.treesitter.start`).
+- Extra parsers: python, bash, markdown, markdown_inline, json, yaml, toml
+
+**[lazydev.nvim](https://github.com/folke/lazydev.nvim)** - Makes lua_ls aware of the Neovim API, plugins and this config's modules (also a completion source)
+
+**[nvim-dap](https://github.com/mfussenegger/nvim-dap)** + **[nvim-dap-python](https://github.com/mfussenegger/nvim-dap-python)** - Python debugging with Mason's `debugpy`
+- Commands: `:DapToggleBreakpoint`, `:DapContinue`, `:DapNew`, `:DapToggleRepl`
 
 ### LSP
 
@@ -174,21 +183,22 @@ Custom plugins beyond the default NvChad setup:
 
 ## Custom Commands
 
-All custom user commands defined in `cmds.lua`:
+All custom user commands defined in `cmds.lua` (functions live on the module returned by `require "cmds"`):
 
 | Command | Function | Description |
 |---------|----------|-------------|
-| `:Taken <key>` | `IsMapped` | Check if a key is mapped and in which mode |
-| `:MdToggleCheckbox` | `MdToggleCheckbox` | Toggle markdown checkbox between `[ ]` and `[x]` |
-| `:MdSortCheckboxes` | `MdSortCheckboxes` | Sort checkboxes in current block (unchecked first) |
-| `:UcOpenNearestURL` | `OpenNearestUrl` | Open nearest URL in default browser |
-| `:OpenHuggingFaceRepo` | `OpenHuggingFaceRepo` | Open HuggingFace model repo (owner/model format) |
-| `:OpenHuggingFaceDataset` | `OpenHuggingFaceDataset` | Open HuggingFace dataset (owner/dataset format) |
-| `:ToggleBashMultiline` | `ToggleBashMultiline` | Collapse/expand bash commands with line continuations |
-| `:ToggleNvtop` | `ToggleNvtop` | Toggle nvtop monitoring panel in vertical split |
-| `:ToggleNvimTreeWidth` | `ToggleNvimTreeWidth` | Toggle NvimTree between default and auto-fit width |
-| `:WorkspaceLumi` | `WorkspaceLumi` | Open workspace preset: file tree + terminal with lumi |
-| `:ToggleAnsi` | `ToggleAnsi` | Toggle ANSI escape code color rendering |
+| `:Taken <key>` | `is_mapped` | Check if a key is mapped and in which mode |
+| `:MdToggleCheckbox` | `md_toggle_checkbox` | Toggle markdown checkbox between `[ ]` and `[x]` |
+| `:MdSortCheckboxes` | `md_sort_checkboxes` | Sort checkboxes in current block (unchecked first) |
+| `:UcOpenNearestURL` | `open_nearest_url` | Open nearest URL in default browser |
+| `:OpenHuggingFaceRepo` | `open_hf_repo` | Open HuggingFace model repo (owner/model format) |
+| `:OpenHuggingFaceDataset` | `open_hf_dataset` | Open HuggingFace dataset (owner/dataset format) |
+| `:ToggleBashMultiline` | `toggle_bash_multiline` | Collapse/expand bash commands with line continuations |
+| `:ToggleNvtop` | `toggle_nvtop` | Toggle nvtop monitoring panel in vertical split |
+| `:ToggleNvimTreeWidth` | `toggle_nvimtree_width` | Toggle NvimTree between default and auto-fit width |
+| `:WorkspaceLumi` | `workspace_lumi` | Open workspace preset: file tree + terminal with lumi |
+| `:ToggleAnsi` | `toggle_ansi` | Toggle ANSI escape code color rendering |
+| `:FormatToggle[!]` | (`configs/conform.lua`) | Toggle format on save (`!` = current buffer) |
 
 ### Command Details
 
@@ -198,7 +208,7 @@ All custom user commands defined in `cmds.lua`:
 
 #### URL/HuggingFace Commands
 - **OpenNearestUrl**: Searches for URLs under cursor, then scans ±100 lines
-- **OpenHuggingFaceRepo**: Searches for `owner/model` pattern, opens `https://huggingface.co/owner/model`
+- **OpenHuggingFaceRepo**: Searches for a bare `owner/model` id (paths like `lua/foo.lua` and URLs are ignored), opens `https://huggingface.co/owner/model`
 - **OpenHuggingFaceDataset**: Searches for `owner/dataset` pattern, opens `https://huggingface.co/datasets/owner/dataset`
 
 #### Bash Command
@@ -216,16 +226,20 @@ All custom user commands defined in `cmds.lua`:
 - **WorkspaceLumi**: Opens NvimTree file tree and a vertical split terminal running the `lumi` command
 
 #### ANSI Renderer
-- **ToggleAnsi**: Strips ANSI escape codes from the current buffer and applies color extmarks to render pixel art
+- **ToggleAnsi**: Strips ANSI escape codes from the current buffer and applies color extmarks to render pixel art. The rendered buffer is read-only so a stray `:w` can't overwrite the original escape codes; toggling off reloads the file from disk. `*.ans` files render automatically on open.
 
 ## LSP Servers
 
-Configured LSP servers (`lua/configs/lspconfig.lua:3`):
+Configured LSP servers (`lua/configs/lspconfig.lua`, plus `lua_ls` from NvChad):
 
 - **html** - HTML language server
 - **cssls** - CSS language server
 - **pyright** - Python language server
 - **marksman** - Markdown language server
+- **ruff** - Python linter/formatter language server
+- **bashls** - Bash language server
+
+Each server is enabled only when its binary is on `$PATH`.
 
 ## Autocommands
 
@@ -247,12 +261,13 @@ Opens a terminal automatically when Neovim is launched without files.
 ```lua
 BufWinEnter, WinEnter, TermOpen → set number and relativenumber
 ```
-Ensures absolute + relative line numbers are always on in all windows.
+Ensures absolute + relative line numbers are on in normal and terminal windows (floats and special buffers like NvimTree/Telescope are left alone).
 
 ### Slurm File Detection
 ```lua
-BufRead, BufNewFile *.slurm, *.sbatch, *sbatch* → setfiletype sh
+vim.filetype.add: *.slurm, *.sbatch, and other files with "sbatch" in the name → sh
 ```
+The name pattern has lowest priority, so e.g. `sbatch_utils.py` is still Python.
 Treats Slurm batch scripts as shell files for proper syntax highlighting.
 
 ## Custom Snippets
@@ -313,7 +328,7 @@ Set `NVIM_THEME=hei` or `NVIM_THEME=hai` to start in either custom theme.
 - **NvDash**: Disabled on startup (`load_on_startup = false`)
 - **Theme Toggle**: Base46's button switches dark/light; `:ThemeCycle` includes mid
 
-Location: `lua/chadrc.lua`
+Location: `lua/_chadrc.lua` (copied to `lua/chadrc.lua` by bootstrap)
 
 ## File Structure
 
@@ -324,22 +339,36 @@ nvim/
 ├── lua/
 │   ├── options.lua         # Custom options (snippet path)
 │   ├── mappings.lua        # All custom keybindings
-│   ├── cmds.lua            # Custom commands and functions
+│   ├── cmds.lua            # User command registration
+│   ├── features/           # Command implementations (openers, markdown, shell, ansi, panels)
 │   ├── autocmds.lua        # Custom autocommands
-│   ├── chadrc.lua          # NvChad configuration (theme, etc.)
+│   ├── _chadrc.lua         # NvChad config template (bootstrap copies it to chadrc.lua, which is gitignored)
 │   ├── configs/
 │   │   ├── conform.lua     # Formatter configuration
 │   │   ├── lspconfig.lua   # LSP server configuration
+│   │   ├── openrouter.lua  # OpenRouter model picker for Avante
 │   │   └── lazy.lua        # Lazy.nvim configuration
 │   ├── plugins/
-│   │   ├── init.lua        # Main plugin definitions
-│   │   └── copilot_chat.lua # CopilotChat plugin config
+│   │   └── init.lua        # Plugin definitions
+│   ├── theme/              # :Theme/:ThemeMid/:ThemeCycle and mid-theme blending
+│   ├── themes/             # Custom base46 themes (hei, hai, *_mid)
 │   └── snippets/
 │       └── python.lua      # Python snippets (hfload)
-└── pack/
-    └── github/start/
-        └── copilot.vim/    # GitHub Copilot
+├── tests/run.lua           # Unit tests for features/ and theme/
+├── .stylua.toml, selene.toml, vim.yml  # Formatter / linter config
+└── pack/                   # Optional hand-installed plugins (gitignored)
 ```
+
+## Development
+
+```sh
+cd nvim
+stylua --check .        # formatting
+selene .                # lint
+nvim -l tests/run.lua   # unit tests
+```
+
+CI for these checks lives in `.github/workflows/nvim.yml` (added separately; pushing workflow files needs the `workflow` token scope).
 
 ## Notes
 
