@@ -388,7 +388,7 @@ selene .                # lint
 nvim -l tests/run.lua   # unit tests
 ```
 
-CI for these checks lives in `.github/workflows/nvim.yml` (added separately; pushing workflow files needs the `workflow` token scope).
+The same three checks run in CI (`.github/workflows/nvim.yml`) on every change under `nvim/`.
 
 ## Notes
 
