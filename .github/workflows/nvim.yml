@@ -1,0 +1,45 @@
+name: nvim
+
+on:
+  push:
+    branches: [main]
+    paths: ["nvim/**", ".github/workflows/nvim.yml"]
+  pull_request:
+    paths: ["nvim/**", ".github/workflows/nvim.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nvim
+    env:
+      STYLUA_VERSION: 2.6.0
+      SELENE_VERSION: 0.32.0
+      NVIM_VERSION: 0.12.6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stylua, selene and neovim
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL "https://github.com/JohnnyMorganz/StyLua/releases/download/v${STYLUA_VERSION}/stylua-linux-x86_64.zip" -o /tmp/stylua.zip
+          curl -sSfL "https://github.com/Kampfkarren/selene/releases/download/${SELENE_VERSION}/selene-${SELENE_VERSION}-linux.zip" -o /tmp/selene.zip
+          unzip -q -o /tmp/stylua.zip -d "$RUNNER_TEMP/bin"
+          unzip -q -o /tmp/selene.zip -d "$RUNNER_TEMP/bin"
+          chmod +x "$RUNNER_TEMP/bin/stylua" "$RUNNER_TEMP/bin/selene"
+          curl -sSfL "https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Format (stylua)
+        run: stylua --check .
+
+      - name: Lint (selene)
+        run: selene .
+
+      - name: Unit tests
+        run: nvim -l tests/run.lua
