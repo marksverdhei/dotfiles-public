@@ -96,6 +96,19 @@ return {
       table.insert(opts.sources, 1, { name = "lazydev", group_index = 0 })
     end,
   },
+  -- Name the <leader> groups in the which-key popup.
+  {
+    "folke/which-key.nvim",
+    opts = function(_, opts)
+      opts.spec = {
+        { "<leader>a", group = "AI (Avante)" },
+        { "<leader>d", group = "Debug / data / diagnostics" },
+        { "<leader>m", group = "Markdown / shell" },
+        { "<leader>s", group = "Toggles (secrets, ANSI)" },
+        { "<leader>t", group = "Terminal / theme / telescope" },
+      }
+    end,
+  },
   -- Python debugging. :DapContinue / :DapToggleBreakpoint etc.; uses the
   -- debugpy installed by mason-tool-installer above.
   {
