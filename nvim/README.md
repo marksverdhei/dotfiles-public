@@ -183,13 +183,13 @@ All custom user commands defined in `cmds.lua` (functions live on the module ret
 |---------|----------|-------------|
 | `:Taken <key>` | `is_mapped` | Check if a key is mapped and in which mode |
 | `:MdToggleCheckbox` | `md_toggle_checkbox` | Toggle markdown checkbox between `[ ]` and `[x]` |
-| `:MdSortCheckboxes` | `MdSortCheckboxes` | Sort checkboxes in current block (unchecked first) |
-| `:UcOpenNearestURL` | `OpenNearestUrl` | Open nearest URL in default browser |
-| `:OpenHuggingFaceRepo` | `OpenHuggingFaceRepo` | Open HuggingFace model repo (owner/model format) |
-| `:OpenHuggingFaceDataset` | `OpenHuggingFaceDataset` | Open HuggingFace dataset (owner/dataset format) |
-| `:ToggleBashMultiline` | `ToggleBashMultiline` | Collapse/expand bash commands with line continuations |
+| `:MdSortCheckboxes` | `md_sort_checkboxes` | Sort checkboxes in current block (unchecked first) |
+| `:UcOpenNearestURL` | `open_nearest_url` | Open nearest URL in default browser |
+| `:OpenHuggingFaceRepo` | `open_hf_repo` | Open HuggingFace model repo (owner/model format) |
+| `:OpenHuggingFaceDataset` | `open_hf_dataset` | Open HuggingFace dataset (owner/dataset format) |
+| `:ToggleBashMultiline` | `toggle_bash_multiline` | Collapse/expand bash commands with line continuations |
 | `:ToggleNvtop` | `toggle_nvtop` | Toggle nvtop monitoring panel in vertical split |
-| `:ToggleNvimTreeWidth` | `ToggleNvimTreeWidth` | Toggle NvimTree between default and auto-fit width |
+| `:ToggleNvimTreeWidth` | `toggle_nvimtree_width` | Toggle NvimTree between default and auto-fit width |
 | `:WorkspaceLumi` | `workspace_lumi` | Open workspace preset: file tree + terminal with lumi |
 | `:ToggleAnsi` | `toggle_ansi` | Toggle ANSI escape code color rendering |
 | `:FormatToggle[!]` | (`configs/conform.lua`) | Toggle format on save (`!` = current buffer) |
