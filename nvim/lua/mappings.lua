@@ -56,6 +56,13 @@ map("x", "<leader>S", ":sort!<CR>", { silent = true, desc = "Sort selected lines
 -- because commands also live in notes and code blocks.
 local function markdown_maps(buf)
   map("n", "<leader>mc", cmds.md_toggle_checkbox, { buffer = buf, desc = "Toggle markdown checkbox" })
+  -- One-key toggle; on lines without a checkbox <CR> keeps its normal meaning.
+  map("n", "<CR>", function()
+    if require("features.markdown").toggle_line(vim.api.nvim_get_current_line()) then
+      return "<cmd>MdToggleCheckbox<CR>"
+    end
+    return "<CR>"
+  end, { buffer = buf, expr = true, desc = "Toggle markdown checkbox (or <CR>)" })
   map(
     "n",
     "<leader>ms",

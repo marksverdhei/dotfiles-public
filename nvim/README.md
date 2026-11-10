@@ -84,6 +84,7 @@ Only defined in markdown buffers.
 
 | Key | Action | Description |
 |-----|--------|-------------|
+| `<CR>` | `md_toggle_checkbox` | Toggle checkbox `[ ]` ↔ `[x]` (normal `<CR>` on other lines) |
 | `<leader>mc` | `md_toggle_checkbox` | Toggle checkbox `[ ]` ↔ `[x]` |
 | `<leader>ms` | `md_sort_checkboxes` | Sort checkboxes: unchecked up, checked down |
 
