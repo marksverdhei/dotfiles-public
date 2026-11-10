@@ -107,6 +107,14 @@ return {
       require("dap-python").setup(vim.uv.fs_stat(debugpy) and debugpy or "python3")
     end,
   },
+  -- Load which-key right after startup. NvChad only lazy-loads it from a
+  -- `<leader>` key stub, and the first <leader> press after startup is lost if
+  -- you pause before the next key (the stub loads which-key but the sequence
+  -- doesn't survive), so e.g. `<leader>mc` silently turns into `mc` (set mark).
+  {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+  },
   {
     "neovim/nvim-lspconfig",
     config = function()
