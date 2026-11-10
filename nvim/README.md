@@ -39,10 +39,9 @@ This Neovim configuration is based on [NvChad v2.5](https://github.com/NvChad/Nv
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `<Esc><Esc>` | `<C-\><C-n>` | Exit terminal to normal mode (a single `<Esc>` still reaches TUIs) |
 | `<C-x>` | `<C-\><C-n>` | Exit terminal to normal mode (NvChad default) |
 
-`<C-w>` is not mapped, so the shell keeps delete-word.
+`<Esc>` and `<C-w>` are not mapped, so TUIs get Esc without delay and the shell keeps delete-word.
 
 ### Tmux Integration (vim-tmux-navigator)
 
@@ -81,8 +80,11 @@ Move lines up/down (normal mode accepts a count, e.g. `3<A-j>`):
 
 ### Markdown Utilities
 
+Only defined in markdown buffers.
+
 | Key | Action | Description |
 |-----|--------|-------------|
+| `<CR>` | `md_toggle_checkbox` | Toggle checkbox `[ ]` ↔ `[x]` (normal `<CR>` on other lines) |
 | `<leader>mc` | `md_toggle_checkbox` | Toggle checkbox `[ ]` ↔ `[x]` |
 | `<leader>ms` | `md_sort_checkboxes` | Sort checkboxes: unchecked up, checked down |
 
@@ -91,6 +93,23 @@ Move lines up/down (normal mode accepts a count, e.g. `3<A-j>`):
 | Key | Action | Description |
 |-----|--------|-------------|
 | `<leader>ml` | `toggle_bash_multiline` | Collapse/expand bash multi-line commands |
+
+### Debugging (nvim-dap)
+
+| Key | Action |
+|-----|--------|
+| `<F5>` | Continue / start |
+| `<F10>` | Step over |
+| `<F11>` | Step into |
+| `<F12>` | Step out |
+| `<leader>db` | Toggle breakpoint |
+| `<leader>dr` | Open REPL |
+| `<leader>dq` | Terminate |
+
+### Which-key groups
+
+`<leader>a` AI (Avante), `<leader>d` debug / data / diagnostics, `<leader>m` markdown / shell,
+`<leader>s` toggles (secrets, ANSI), `<leader>t` terminal / theme / telescope.
 
 ### URL & HuggingFace Utilities
 
@@ -174,7 +193,7 @@ lua-language-server, pyright, ruff, bash-language-server, marksman, stylua, shfm
 **[lazydev.nvim](https://github.com/folke/lazydev.nvim)** - Makes lua_ls aware of the Neovim API, plugins and this config's modules (also a completion source)
 
 **[nvim-dap](https://github.com/mfussenegger/nvim-dap)** + **[nvim-dap-python](https://github.com/mfussenegger/nvim-dap-python)** - Python debugging with Mason's `debugpy`
-- Commands: `:DapToggleBreakpoint`, `:DapContinue`, `:DapNew`, `:DapToggleRepl`
+- Commands: `:DapToggleBreakpoint`, `:DapContinue`, `:DapNew`, `:DapToggleRepl`; keys under [Debugging](#debugging-nvim-dap)
 
 ### LSP
 

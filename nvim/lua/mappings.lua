@@ -6,6 +6,7 @@ local cmds = require "cmds"
 -- General
 map("n", ";", ":", { desc = "CMD enter command mode" })
 map("i", "jk", "<ESC>", { desc = "Exit insert mode" })
+-- Deliberately shadows the built-in `gp` (put, cursor after), which is rarely used.
 map("n", "gp", '"_ddP', { desc = "Replace line with yanked content" })
 
 -- Whole file. Normal-mode only: a visual-mode `A` would shadow visual-block
@@ -16,10 +17,9 @@ map("n", "<leader>Y", "<cmd>%yank<CR>", { desc = "Yank entire file without movin
 
 -- Terminal
 map("n", "<leader>tt", "<cmd>terminal<CR>", { desc = "Open Terminal" })
--- Double <Esc> so a single one still reaches TUIs (fzf, lazygit, nvtop, shell
--- vi-mode). NvChad's <C-x> also leaves terminal mode. <C-w> is left alone so
--- the shell keeps delete-word; use <C-h/j/k/l> to move between windows.
-map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal to Normal" })
+-- Leave terminal mode with NvChad's <C-x>. <Esc> is not mapped at all, so TUIs
+-- (fzf, lazygit, nvtop, shell vi-mode) get it with no 'timeoutlen' delay, and
+-- <C-w> stays the shell's delete-word. <C-h/j/k/l> move between windows.
 
 -- Themes
 map("n", "<leader>tm", "<cmd>ThemeMid<CR>", { desc = "Use current theme family's mid variant" })
@@ -51,9 +51,39 @@ map("x", "<A-k>", ":move '<-2<CR>gv=gv", { silent = true, desc = "Move selection
 map("x", "<leader>s", ":sort<CR>", { silent = true, desc = "Sort selected lines" })
 map("x", "<leader>S", ":sort!<CR>", { silent = true, desc = "Sort selected lines (desc)" })
 
--- Markdown / shell helpers (<leader>m group; NvChad owns <leader>ch, <leader>cm)
-map("n", "<leader>mc", cmds.md_toggle_checkbox, { desc = "Toggle markdown checkbox" })
-map("n", "<leader>ms", cmds.md_sort_checkboxes, { desc = "Sort markdown checkboxes: unchecked up, checked down" })
+-- Markdown / shell helpers (<leader>m group; NvChad owns <leader>ch, <leader>cm).
+-- Checkbox maps only exist in markdown buffers; the multiline toggle is global
+-- because commands also live in notes and code blocks.
+local function markdown_maps(buf)
+  map("n", "<leader>mc", cmds.md_toggle_checkbox, { buffer = buf, desc = "Toggle markdown checkbox" })
+  -- One-key toggle; on lines without a checkbox <CR> keeps its normal meaning.
+  map("n", "<CR>", function()
+    if require("features.markdown").toggle_line(vim.api.nvim_get_current_line()) then
+      return "<cmd>MdToggleCheckbox<CR>"
+    end
+    return "<CR>"
+  end, { buffer = buf, expr = true, desc = "Toggle markdown checkbox (or <CR>)" })
+  map(
+    "n",
+    "<leader>ms",
+    cmds.md_sort_checkboxes,
+    { buffer = buf, desc = "Sort markdown checkboxes: unchecked up, checked down" }
+  )
+end
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("MarkdownMaps", { clear = true }),
+  pattern = "markdown",
+  callback = function(args)
+    markdown_maps(args.buf)
+  end,
+})
+-- This file is loaded via vim.schedule, after FileType already fired for any
+-- file given on the command line.
+for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.bo[buf].filetype == "markdown" then
+    markdown_maps(buf)
+  end
+end
 map("n", "<leader>ml", cmds.toggle_bash_multiline, { desc = "Collapse or expand bash multi-line" })
 
 -- Openers
@@ -76,3 +106,17 @@ map("n", "<leader>ar", "<cmd>AvanteRefresh<CR>", { desc = "Avante: Refresh" })
 map("n", "<leader>ah", "<cmd>AvanteHistory<CR>", { desc = "Avante: History" })
 
 map("n", "<leader>sa", "<cmd>ToggleAnsi<CR>", { desc = "Toggle ANSI rendering" })
+
+-- Debugging (nvim-dap loads on first use)
+local function dap(fn)
+  return function()
+    require("dap")[fn]()
+  end
+end
+map("n", "<F5>", dap "continue", { desc = "Debug: Continue / start" })
+map("n", "<F10>", dap "step_over", { desc = "Debug: Step over" })
+map("n", "<F11>", dap "step_into", { desc = "Debug: Step into" })
+map("n", "<F12>", dap "step_out", { desc = "Debug: Step out" })
+map("n", "<leader>db", dap "toggle_breakpoint", { desc = "Debug: Toggle breakpoint" })
+map("n", "<leader>dr", dap "repl_open", { desc = "Debug: Open REPL" })
+map("n", "<leader>dq", dap "terminate", { desc = "Debug: Terminate" })
