@@ -392,6 +392,8 @@ The same three checks run in CI (`.github/workflows/nvim.yml`) on every change u
 
 ## Notes
 
+- **Lockfile guard** (`lua/configs/lock_guard.lua`): when lazy.nvim installs a newly added plugin at startup it rewrites `lazy-lock.json` with the commits currently on disk, which can quietly replace newer pins with older ones. The guard puts the committed lockfile back and tells you to run `:Lazy restore`. `:Lazy update`/`sync` still update the lockfile as usual.
+
 - Configuration is built on **NvChad v2.5** as the base framework
 - Uses **lazy.nvim** for plugin management
 - Custom snippet path: `~/.config/nvim/lua/snippets`
