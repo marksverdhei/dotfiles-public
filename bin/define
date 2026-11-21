@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""define <word> — meta dictionary: the top definitions across dictionaries.
+
+heidict always takes precedence: its senses fill the first slots. The rest
+are drawn round-robin from the open dictionaries, in this order:
+
+  wiktionary  en.wiktionary.org REST API (CC BY-SA)
+  wordnet     WordNet 3.0, via dict.org
+  gcide       Collaborative Int'l Dictionary of English (Webster 1913+), via dict.org
+  urban       Urban Dictionary (unofficial API; not openly licensed, but the slang authority)
+  foldoc      Free On-line Dictionary of Computing, via dict.org
+  jargon      The Jargon File, via dict.org
+
+usage: define [-n N] [-a] [--json] [-s SRC,SRC] [--no-cache] <word ...>
+  -n N        number of definitions (default 3)
+  -a, --all   every definition, in ranked order
+  -s SRCS     only these sources (comma-separated; heidict is still first)
+  --json      machine-readable output
+  --no-cache  skip the 7-day response cache in ~/.cache/define
+"""
+import concurrent.futures as cf
+import hashlib
+import html
+import json
+import os
+import pathlib
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import textwrap
+import time
+import urllib.parse
+import urllib.request
+
+SOURCES = ["wiktionary", "wordnet", "gcide", "urban", "foldoc", "jargon"]
+DICT_DB = {"wordnet": "wn", "gcide": "gcide", "foldoc": "foldoc", "jargon": "jargon"}
+UA = "define-cli/1.0 (HAIos meta dictionary; https://github.com/heiervang-technologies)"
+TIMEOUT = 6
+CACHE = pathlib.Path(os.environ.get("XDG_CACHE_HOME", pathlib.Path.home() / ".cache")) / "define"
+CACHE_TTL = 7 * 86400
+
+TTY = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def c(code, s):
+    return f"\033[{code}m{s}\033[0m" if TTY else s
+
+
+def bold(s): return c("1", s)
+def dim(s): return c("2", s)
+def ital(s): return c("3", s)
+def accent(s): return c("1;36", s)
+
+
+SRC_COLOR = {"heidict": "1;35", "wiktionary": "34", "wordnet": "32",
+             "gcide": "33", "urban": "1;33", "foldoc": "36", "jargon": "31"}
+
+
+def width():
+    try:
+        return min(os.get_terminal_size().columns, 100)
+    except OSError:
+        return 80
+
+
+def squash(s):
+    return " ".join(str(s).split())
+
+
+def defn(source, text, pos=None, example=None, register=None):
+    return {"source": source, "pos": pos, "text": squash(text),
+            "example": squash(example) if example else None, "register": register or []}
+
+
+# ---------------------------------------------------------------- cache
+
+def cached(key, fn, use_cache):
+    path = CACHE / (hashlib.sha1(key.encode()).hexdigest() + ".json")
+    if use_cache and path.exists() and time.time() - path.stat().st_mtime < CACHE_TTL:
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            pass
+    result = fn()
+    if use_cache and result is not None:
+        try:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(result))
+        except OSError:
+            pass
+    return result
+
+
+# ---------------------------------------------------------------- heidict
+
+def heidict(word):
+    exe = shutil.which("heidict")
+    if not exe:
+        return []
+    try:
+        out = subprocess.run([exe, "--json", word], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if out.returncode != 0 or not out.stdout.strip():
+        return []
+    entries = json.loads(out.stdout)
+    entries = entries if isinstance(entries, list) else [entries]
+    defs = []
+    for e in entries:
+        for d in e.get("definitions") or []:
+            ex = (d.get("examples") or [None])[0]
+            defs.append(defn("heidict", d.get("gloss", ""), e.get("pos"), ex, d.get("register")))
+    return defs
+
+
+# ---------------------------------------------------------------- wiktionary
+
+def strip_html(s):
+    return html.unescape(re.sub(r"<[^>]+>", "", s or ""))
+
+
+def wiktionary(word):
+    url = ("https://en.wiktionary.org/api/rest_v1/page/definition/"
+           + urllib.parse.quote(word.replace(" ", "_")))
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    defs = []
+    for block in data.get("en") or []:
+        pos = (block.get("partOfSpeech") or "").lower() or None
+        for d in block.get("definitions") or []:
+            text = strip_html(d.get("definition"))
+            if not squash(text):
+                continue
+            ex = (d.get("parsedExamples") or [{}])[0].get("example") if d.get("parsedExamples") else \
+                 (d.get("examples") or [None])[0]
+            defs.append(defn("wiktionary", text, pos, strip_html(ex) if ex else None))
+    return defs
+
+
+# ---------------------------------------------------------------- urban dictionary
+
+URBAN_MAX = 5      # entries kept; the API orders by relevance (vote counts now read 0)
+URBAN_CHARS = 400  # long rants get trimmed
+
+
+def unbracket(s):
+    return re.sub(r"\[([^\]]*)\]", r"\1", s or "")
+
+
+def clip(s, n):
+    s = squash(s)
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0] + "…"
+
+
+def urban(word):
+    url = "https://api.urbandictionary.com/v0/define?term=" + urllib.parse.quote(word)
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        data = json.load(r)
+    defs = []
+    for e in data.get("list") or []:
+        if e.get("word", "").strip().lower() != word.strip().lower():
+            continue
+        text = unbracket(e.get("definition"))
+        ex = unbracket(e.get("example")).strip().splitlines()
+        ex = next((l for l in ex if l.strip()), None)
+        if squash(text):
+            defs.append(defn("urban", clip(text, URBAN_CHARS), example=clip(ex, 160) if ex else None))
+        if len(defs) >= URBAN_MAX:
+            break
+    return defs
+
+
+# ---------------------------------------------------------------- dict.org (RFC 2229)
+
+def dict_org(word, dbs):
+    """One connection, several DEFINEs. Returns {db: [raw definition text, ...]}."""
+    out = {db: [] for db in dbs}
+    q = word.replace("\\", "").replace('"', "")
+    with socket.create_connection(("dict.org", 2628), timeout=TIMEOUT) as s:
+        f = s.makefile("rwb")
+        f.readline()
+        f.write(b"CLIENT define-cli\r\n"); f.flush(); f.readline()
+        for db in dbs:
+            f.write(f'DEFINE {db} "{q}"\r\n'.encode()); f.flush()
+            while True:
+                line = f.readline().decode("utf-8", "replace")
+                if not line:
+                    return out
+                code = line[:3]
+                if code == "151":
+                    body = []
+                    while True:
+                        l = f.readline().decode("utf-8", "replace").rstrip("\r\n")
+                        if l == ".":
+                            break
+                        body.append(l[1:] if l.startswith("..") else l)
+                    out[db].append("\n".join(body))
+                elif code in ("250", "552") or code[0] in "45":
+                    break
+        f.write(b"QUIT\r\n"); f.flush()
+    return out
+
+
+WN_POS = {"n": "noun", "v": "verb", "adj": "adjective", "adv": "adverb"}
+
+
+def parse_wordnet(raw):
+    defs = []
+    for body in raw:
+        text = " ".join(body.splitlines()[1:])
+        text = re.sub(r"\[(syn|ant|also):[^\]]*\]", "", text)
+        pos = None
+        for m in re.finditer(r"(?:\b(n|v|adj|adv)\s+)?(?<![\w\d])\d+:\s(.*?)(?=(?:\b(?:n|v|adj|adv)\s+)?\b\d+:\s|$)", text):
+            pos = WN_POS.get(m.group(1), pos)
+            gloss, _, ex = m.group(2).partition('; "')
+            ex = ex.split('"; "')[0].strip('" ;')
+            defs.append(defn("wordnet", gloss.strip(" ;"), pos, ex or None))
+    return defs
+
+
+def parse_gcide(raw, word=""):
+    defs = []
+    exact = lambda b: b.split("\\")[0].strip().lower() == word.lower()
+    for body in sorted(raw, key=lambda b: not exact(b)):
+        body = re.sub(r"\[[^\]]*(Webster|PJC|Century|Chambers)[^\]]*\]", "", body)
+        body = re.sub(r"\{([^}]*)\}", r"\1", body)
+        lines = body.splitlines()
+        head = lines[0] if lines else ""
+        m = re.search(r"\\\s*,?\s*([a-z][a-z. &]*?)\.", head)
+        pos = m.group(1).strip() if m else None
+        text = squash(" ".join(lines[1:]))
+        senses = re.split(r"(?:^|\s)\d+\.\s", text)
+        senses = senses[1:] if len(senses) > 1 else [re.sub(r"^\[[^\]]*\]\s*", "", text)]
+        for s in senses:
+            s = re.split(r"\s(?:Syn\.|Note:|--)\s", s)[0]
+            s = re.sub(r"^\((?:[A-Z][\w.]*\s*)+\)\s*", "", s.strip())
+            gloss = re.split(r'(?<=\.)\s+["\[]', s)[0].strip()
+            if len(gloss) > 3:
+                defs.append(defn("gcide", gloss, pos))
+    return defs
+
+
+def parse_prose(source):
+    def parse(raw):
+        defs = []
+        for body in raw:
+            paras = [squash(p) for p in re.split(r"\n\s*\n", body)]
+            paras = [p for p in paras[1:] if p] or paras
+            if paras:
+                text = re.sub(r"\{([^}]*)\}", r"\1", paras[0])
+                text = re.sub(r"^\d+\.\s*", "", text)
+                text = re.sub(r"^<[^>]+>\s*", "", text)
+                defs.append(defn(source, text))
+        return defs
+    return parse
+
+
+PARSERS = {"wordnet": parse_wordnet, "gcide": parse_gcide,
+           "foldoc": parse_prose("foldoc"), "jargon": parse_prose("jargon")}
+
+
+# ---------------------------------------------------------------- merge
+
+def norm(s):
+    return re.sub(r"[^a-z0-9 ]", "", s.lower())[:80]
+
+
+def collect(word, sources, use_cache):
+    results, errors = {}, {}
+    online = [s for s in sources if s in SOURCES]
+    dbs = [DICT_DB[s] for s in online if s in DICT_DB]
+    key = word.lower()
+
+    jobs = {}
+    with cf.ThreadPoolExecutor(max_workers=4) as pool:
+        jobs[pool.submit(heidict, word)] = "heidict"
+        if "wiktionary" in online:
+            jobs[pool.submit(cached, f"wiktionary:{key}", lambda: wiktionary(word), use_cache)] = "wiktionary"
+        if "urban" in online:
+            jobs[pool.submit(cached, f"urban:{key}", lambda: urban(word), use_cache)] = "urban"
+        if dbs:
+            jobs[pool.submit(cached, f"dict.org:{','.join(dbs)}:{key}",
+                             lambda: dict_org(word, dbs), use_cache)] = "dict.org"
+        for fut in cf.as_completed(jobs):
+            name = jobs[fut]
+            try:
+                res = fut.result()
+            except Exception as e:  # network trouble shouldn't sink other sources
+                errors[name] = f"{type(e).__name__}: {e}"
+                continue
+            if name == "dict.org":
+                for src, db in DICT_DB.items():
+                    if db in res:
+                        results[src] = (parse_gcide(res[db], word) if src == "gcide"
+                                        else PARSERS[src](res[db]))
+            else:
+                results[name] = res
+    return results, errors
+
+
+def rank(results, sources, n):
+    seen, ranked = set(), []
+
+    def take(d):
+        k = norm(d["text"])
+        if not k or k in seen:
+            return False
+        seen.add(k)
+        ranked.append(d)
+        return True
+
+    for d in results.get("heidict", []):
+        take(d)
+    queues = [list(results.get(s, [])) for s in sources]
+    while any(queues) and (n is None or len(ranked) < n):
+        for q in queues:
+            while q:
+                if take(q.pop(0)):
+                    break
+            if n is not None and len(ranked) >= n:
+                break
+    return ranked if n is None else ranked[:n]
+
+
+# ---------------------------------------------------------------- output
+
+def tag(src):
+    return c(SRC_COLOR.get(src, "0"), f"[{src}]")
+
+
+def wrap(text, indent):
+    return textwrap.fill(text, width(), initial_indent=indent, subsequent_indent=" " * len(indent))
+
+
+def render_item(i, d):
+    meta = " ".join(x for x in (d["pos"] and ital(d["pos"]),
+                                 d["register"] and dim(", ".join(d["register"]))) if x)
+    lines = [f" {bold(f'{i}.')} {tag(d['source'])} {meta}".rstrip(), wrap(d["text"], "    ")]
+    if d["example"]:
+        lines.append(ital(wrap(f"“{d['example']}”", "      ")))
+    return "\n".join(lines)
+
+
+def main(argv):
+    n, all_, as_json, use_cache, only = 3, False, False, True, None
+    words = []
+    it = iter(argv)
+    for a in it:
+        if a in ("-h", "--help"):
+            print(__doc__.strip()); return 0
+        elif a == "-n":
+            n = int(next(it))
+        elif a.startswith("-n") and a[2:].isdigit():
+            n = int(a[2:])
+        elif a in ("-a", "--all"):
+            all_ = True
+        elif a == "--json":
+            as_json = True
+        elif a == "--no-cache":
+            use_cache = False
+        elif a in ("-s", "--sources"):
+            only = [s.strip() for s in next(it).split(",") if s.strip()]
+        else:
+            words.append(a)
+    if not words:
+        print("usage: define [-n N] [-a] [--json] [-s SRC,SRC] <word ...>", file=sys.stderr)
+        return 2
+    word = " ".join(words)
+    sources = [s for s in (only or SOURCES) if s in SOURCES]
+
+    results, errors = collect(word, sources, use_cache)
+    ranked = rank(results, sources, None if all_ else n)
+
+    if as_json:
+        print(json.dumps({"word": word, "definitions": ranked,
+                          "counts": {k: len(v) for k, v in results.items()},
+                          "errors": errors}, indent=2, ensure_ascii=False))
+        return 0 if ranked else 1
+
+    if not ranked:
+        print(f"define: no definitions for “{word}”", file=sys.stderr)
+        for k, v in errors.items():
+            print(dim(f"  {k}: {v}"), file=sys.stderr)
+        return 1
+
+    print(accent(word))
+    for i, d in enumerate(ranked, 1):
+        print(render_item(i, d))
+    total = sum(len(v) for v in results.values())
+    found = [f"{k} {len(results[k])}" for k in ["heidict"] + sources if results.get(k)]
+    foot = f"{len(ranked)} of {total} · " + ", ".join(found)
+    if errors:
+        foot += " · unreachable: " + ", ".join(errors)
+    if not all_ and total > len(ranked):
+        foot += " · define -a for all"
+    print(dim(foot))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)
+    except KeyboardInterrupt:
+        sys.exit(130)
