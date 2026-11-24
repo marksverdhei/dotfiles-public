@@ -1,0 +1,62 @@
+#!/bin/bash
+# music-play — player behind the SUPER+M walker music menu (elephant menu
+# ~/dotfiles/elephant/menus/music.lua).
+#
+#   music-play <file>        play as audio only (videos too) in one headless mpv,
+#                            replacing whatever this script was playing before
+#   music-play desktop <id>  play a bg-*.desktop background video's file as audio
+#   music-play stop          stop audio started here and any background video
+#
+# Only one track plays at a time: a pick replaces the previous pick and mutes
+# the mpvpaper background video (its picture keeps running).
+set -u
+
+SOCKET="${XDG_RUNTIME_DIR:-/tmp}/music-play.sock"
+BG_SOCKET="/tmp/mpvpaper-socket" # subsctl's mpvpaper IPC socket
+SUBSCTL="$HOME/.local/bin/subsctl"
+
+stop_audio() {
+  if [[ -S $SOCKET ]]; then
+    echo '{"command":["quit"]}' | socat - "$SOCKET" >/dev/null 2>&1
+    rm -f "$SOCKET"
+  fi
+}
+
+mute_bg() {
+  [[ -S $BG_SOCKET ]] &&
+    echo '{"command":["set_property","mute",true]}' | socat - "$BG_SOCKET" >/dev/null 2>&1
+}
+
+play_audio() {
+  local file=$1 title=$2
+  stop_audio
+  mute_bg
+  setsid -f mpv --no-video --no-terminal --really-quiet --loop-file=no \
+    --input-ipc-server="$SOCKET" "$file" >/dev/null 2>&1
+  notify-send -t 2500 "Now playing" "$title"
+}
+
+case "${1:-}" in
+  "" | -h | --help)
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  stop)
+    stop_audio
+    "$SUBSCTL" quit >/dev/null 2>&1
+    exit 0
+    ;;
+  desktop)
+    # bg-*.desktop entries (bg-yt) run `subsctl bg "<video>"`; play that file
+    DESKTOP="$HOME/.local/share/applications/$2"
+    VIDEO=$(grep -oP '^Exec=.*subsctl bg "\K[^"]+' "$DESKTOP")
+    NAME=$(grep -oP '^Name=(BG )?\K.*' "$DESKTOP")
+    [[ -f $VIDEO ]] || { notify-send "Music" "Not found: ${VIDEO:-$2}"; exit 1; }
+    play_audio "$VIDEO" "$NAME"
+    exit 0
+    ;;
+esac
+
+FILE=$1
+[[ -f $FILE ]] || { notify-send "Music" "Not found: $FILE"; exit 1; }
+play_audio "$FILE" "$(basename "${FILE%.*}")"

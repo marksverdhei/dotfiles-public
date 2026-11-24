@@ -141,9 +141,20 @@ $T set -g status-right "${CONTINUUM_HOOK}#[fg=$CHIP,bg=$BAND]$L#[fg=$HOST,bg=$CH
 # Inactive windows are the same shape drawn quietly, no fill; under 120
 # columns they drop their pane id so the list doesn't truncate.
 DOT="#[fg=$LINE] · "
+# Agent state (tmux-agent-state sets the pane option @agent_state from Claude
+# Code hooks and the unleash codex wrapper): the accent-coloured pane and
+# window indicators turn the agent colour while that agent works.
+AG_WORK='#{m:*working*,#{P:#{@agent_state} }}'
+AG_WAIT='#{m:*waiting*,#{P:#{@agent_state} }}'
+# Working = cyan in place of the accent; on a cyan theme, amber instead.
+# Blocked on you = violet.
+case "${ACCENT,,}" in "#22d3ee" | "#06b6d4" | "#67e8f9") AG_COL="$WARN" ;; *) AG_COL="#22d3ee" ;; esac
+AG_WAITCOL="#a78bfa"
+# The window's accent: agent colour while any agent in it works or waits.
+W_ACC="#{?$AG_WAIT,$AG_WAITCOL,#{?$AG_WORK,$AG_COL,$ACCENT}}"
 $T set -g window-status-separator " "
-$T set -g window-status-format "#[fg=$FAINT,bg=$BAND] #I #{?#{e|<:#{client_width},120},,#[fg=$LINE]#{pane_id} }#[fg=$MUTED]#W#{?window_bell_flag,#[fg=$BAD#,bold] bell#[nobold],}#{?window_zoomed_flag,#[fg=$FAINT] zoom,} "
-$T set -g window-status-current-format "#[fg=$ACCENT,bg=$BAND]$L#[fg=$BG,bg=$ACCENT,bold]$P#I$P#[fg=$ACCENT,bg=$CHIP,nobold]$M#[fg=$MUTED] #{pane_id} #[fg=$INK,bold]#W#[nobold]#{?#{==:#W,#{pane_current_command}},,$DOT#[fg=$MUTED]#{=12:pane_current_command}}#{?window_zoomed_flag,$DOT#[fg=$ACCENT]zoom,}#[fg=$CHIP,bg=$BAND]$R"
+$T set -g window-status-format "#[fg=$FAINT,bg=$BAND] #{?$AG_WAIT,#[fg=$AG_WAITCOL#,bold]#I#[nobold],#{?$AG_WORK,#[fg=$AG_COL#,bold]#I#[nobold],#I}}#[fg=$FAINT] #{?#{e|<:#{client_width},120},,#[fg=$LINE]#{pane_id} }#[fg=$MUTED]#W#{?window_bell_flag,#[fg=$BAD#,bold] bell#[nobold],}#{?window_zoomed_flag,#[fg=$FAINT] zoom,} "
+$T set -g window-status-current-format "#[fg=$W_ACC,bg=$BAND]$L#[fg=$BG,bg=$W_ACC,bold]$P#I$P#[fg=$W_ACC,bg=$CHIP,nobold]$M#[fg=$MUTED] #{pane_id} #[fg=$INK,bold]#W#[nobold]#{?#{==:#W,#{pane_current_command}},,$DOT#[fg=$MUTED]#{=12:pane_current_command}}#{?window_zoomed_flag,$DOT#[fg=$ACCENT]zoom,}#[fg=$CHIP,bg=$BAND]$R"
 
 # Pane header (top border label).
 # Talking-stick holder (its id == /tmp/talking-stick-holder): the whole label
@@ -161,8 +172,10 @@ if [ "$($T show-options -gwv pane-border-status 2>/dev/null)" = "top" ]; then
   # holder: one solid amber pill — mic, the word STICK, heartbeat, id, name
   P_STICK="#[fg=$WARN]$L#[bg=$WARN#,fg=$BG#,bold]$G_MIC STICK  $HEART_ON_STICK#{pane_id}  $NAME#[bg=default#,fg=$WARN#,nobold]$R"
   # active: two-tone pill like the active window (solid id, glass title)
-  P_ACTIVE="#[fg=$ACCENT]$L#[bg=$ACCENT#,fg=$BG#,bold]$P#{pane_id}$P#[bg=$CHIP#,fg=$ACCENT#,nobold]$M $HEART#[fg=$INK]$NAME#[bg=default#,fg=$CHIP]$R"
+  # pane accent: the agent colour while this pane's agent works or waits
+  P_ACC="#{?#{==:#{@agent_state},waiting},$AG_WAITCOL,#{?#{==:#{@agent_state},working},$AG_COL,$ACCENT}}"
+  P_ACTIVE="#[fg=$P_ACC]$L#[bg=$P_ACC#,fg=$BG#,bold]$P#{pane_id}$P#[bg=$CHIP#,fg=$P_ACC#,nobold]$M $HEART#[fg=$INK]$NAME#[bg=default#,fg=$CHIP]$R"
   # inactive: same shape, no fill
-  P_IDLE="#[fg=$FAINT] #{pane_id} $HEART#[fg=$MUTED]$NAME "
+  P_IDLE="#[fg=#{?#{@agent_state},$P_ACC,$FAINT}] #{pane_id} $HEART#[fg=$MUTED]$NAME "
   $T set -g pane-border-format "#{?$STICK,$P_STICK,#{?pane_active,$P_ACTIVE,$P_IDLE}}#[default]"
 fi

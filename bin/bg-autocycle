@@ -21,7 +21,7 @@ case "${1:-status}" in
       echo "[$(date +%T)] started, interval=${INTERVAL}s" >> "$LOGFILE"
       while :; do
         sleep "$INTERVAL"
-        omarchy-theme-bg-next >/dev/null 2>&1
+        HAIOS_WALLPAPER_AUTOCYCLE=1 omarchy-theme-bg-next >/dev/null 2>&1
         cur=$(readlink "$HOME/.config/omarchy/current/background" 2>/dev/null | xargs -r basename)
         echo "[$(date +%T)] cycled -> $cur" >> "$LOGFILE"
       done

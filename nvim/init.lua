@@ -48,3 +48,13 @@ require("theme").setup()
 vim.schedule(function()
   require "mappings"
 end)
+
+-- ears voice coding (experiment, ears exp/code-dictation): while ears' VAD
+-- runs, the focused Neovim takes speech as code and voice commands. Warns
+-- if that checkout is gone.
+local ears_code = vim.fn.expand "~/worktrees/code-dictation-qol/experiments/code-dictation/ears_code.lua"
+if vim.uv.fs_stat(ears_code) then
+  vim.schedule(function() dofile(ears_code) end)
+else
+  vim.notify("ears code dictation: " .. ears_code .. " is gone", vim.log.levels.WARN)
+end

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# tmux-agent-state: Claude Code hook -> tmux pane option @agent_state
+#
+#   working   a prompt was submitted or a tool is running
+#   waiting   the agent is blocked on you (permission prompt)
+#   (unset)   idle: the turn ended, or the session ended
+#
+# omarchy-tmux-theme colours a window in the status bar when any pane in it
+# is working or waiting (#{P:...} over the window's panes).
+#
+# Registered in ~/.claude/settings.json for UserPromptSubmit, PreToolUse,
+# PostToolUse, SubagentStart, Notification, Stop, StopFailure, SessionEnd.
+# Contract: never blocks, never fails, never prints; always exits 0.
+# Codex (~/.codex/hooks.json, same event names plus PermissionRequest and
+# Interrupt) calls it too; agy leaves no state.
+
+payload=$(timeout 1 cat 2>/dev/null)
+[ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1 || exit 0
+
+event=$(printf '%s' "$payload" | grep -o '"hook_event_name" *: *"[A-Za-z]*"' | head -1 | sed 's/.*"\([A-Za-z]*\)"$/\1/')
+case "$event" in
+  UserPromptSubmit | PreToolUse | PostToolUse | SubagentStart) state=working ;;
+  PermissionRequest) state=waiting ;;   # codex
+  Notification)
+    # Only a permission prompt means "blocked on you"; the 60 s idle reminder
+    # arrives after Stop and must not resurrect a finished turn.
+    if printf '%s' "$payload" | grep -q -i -E '"notification_type" *: *"permission|needs your permission|permission to use'; then
+      state=waiting
+    else
+      exit 0
+    fi ;;
+  Stop | StopFailure | SessionEnd | Interrupt) state= ;;
+  *) exit 0 ;;
+esac
+
+if [ -n "$state" ]; then
+  [ "$(tmux show -pqv -t "$TMUX_PANE" @agent_state 2>/dev/null)" = "$state" ] && exit 0
+  tmux set -p -t "$TMUX_PANE" @agent_state "$state" 2>/dev/null
+else
+  tmux set -pu -t "$TMUX_PANE" @agent_state 2>/dev/null
+fi
+tmux refresh-client -S 2>/dev/null
+exit 0

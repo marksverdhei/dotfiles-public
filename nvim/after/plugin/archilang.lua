@@ -1,0 +1,1 @@
+/home/me/archilang/editor/nvim/after/plugin/archilang.lua

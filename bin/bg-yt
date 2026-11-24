@@ -10,28 +10,38 @@
 #   bg-yt <url> [-n NAME] [-c CATEGORY] [--set] [--force]
 #
 # Flags:
-#   -n NAME       Display name (default: YouTube title)
+#   -n NAME       Display name (default: "<Channel> - <Title>", cleaned)
+#   -a ARTIST     Artist prefix (default: channel name; "" for none)
 #   -c CATEGORY   Group prefix in .desktop name (default: yt)
 #                 Examples: soul, banger, lofi, vibe
 #   --set         Apply as wallpaper immediately after registering
 #   --force       Re-download / overwrite even if files already exist
+#
+# Titles are cleaned automatically: decorative Unicode fonts (𝒾𝓃 𝓂𝓎 𝓁𝒶𝓃𝑒) are
+# folded to plain ASCII, ornament glyphs (༺⢾░▒▓█) are dropped, all-lowercase
+# titles are title-cased, and the channel is prefixed unless the title already
+# reads "Artist - Track". So a Soul Sounds upload lands as
+# "BG: Soul Sounds - In My Lane" with ASCII file names.
 
 set -euo pipefail
 
 URL=""
 NAME=""
+ARTIST=""
+ARTIST_SET=0
 CATEGORY="yt"
 SET_NOW=0
 FORCE=0
 
 usage() {
-  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--name)     NAME="$2"; shift 2 ;;
+    -a|--artist)   ARTIST="$2"; ARTIST_SET=1; shift 2 ;;
     -c|--category) CATEGORY="$2"; shift 2 ;;
     --set)         SET_NOW=1; shift ;;
     --force)       FORCE=1; shift ;;
@@ -57,22 +67,58 @@ ICONS_DIR="$HOME/.local/share/icons/bg-videos"
 APPS_DIR="$HOME/.local/share/applications"
 mkdir -p "$VIDEOS_DIR" "$ICONS_DIR" "$APPS_DIR"
 
-VIDEO_ID=$(yt-dlp --get-id --no-warnings "$URL")
+# One metadata call: id, title, channel.
+mapfile -t META < <(yt-dlp --no-warnings --skip-download \
+  --print '%(id)s' --print '%(title)s' --print '%(channel,uploader)s' "$URL")
+VIDEO_ID="${META[0]:-}"
+[[ -n $VIDEO_ID ]] || { echo "error: could not read video metadata" >&2; exit 1; }
+RAW_TITLE="${META[1]:-}"
+(( ARTIST_SET )) || ARTIST="${META[2]:-}"
+[[ $ARTIST == NA ]] && ARTIST=""
+
+# Fold fancy-font Unicode to ASCII, drop ornaments, tidy spacing and case.
+clean_text() {
+  /usr/bin/python3 -I -c '
+import re, sys, unicodedata as u
+s = u.normalize("NFKC", sys.argv[1])
+keep = set(" -&!?.,()[]:+/#%$@")
+s = "".join(c if (u.category(c)[0] in "LN" or c in keep or c == "\x27") else " " for c in s)
+# Re-join letter-spaced words: "r e c e s s i o n  h y p e r p o p".
+s = re.sub(r"(?<!\S)(?:\w ){2,}\w(?!\S)", lambda m: m.group(0).replace(" ", ""), s)
+s = re.sub(r"\s+", " ", s).strip(" -:,.")
+t = s.split(" ")
+# Strip a decorative token that wraps both ends (e.g. "未 Chat 未").
+while len(t) > 2 and t[0] == t[-1] and not t[0].isascii():
+    t = t[1:-1]
+s = " ".join(t)
+s = re.sub(r"\s+-\s+Topic$", "", s)
+if s and not any(c.isupper() for c in s):
+    s = re.sub(r"(^|[\s(\[/-])([a-z])", lambda m: m.group(1) + m.group(2).upper(), s)
+print(s)
+' "$1"
+}
+
 if [[ -z $NAME ]]; then
-  NAME=$(yt-dlp --get-title --no-warnings "$URL")
+  NAME=$(clean_text "$RAW_TITLE")
+  ARTIST=$(clean_text "$ARTIST")
+  # Prefix the channel unless the title already carries an artist.
+  if [[ -n $ARTIST && $NAME != *" - "* && ${NAME,,} != "${ARTIST,,}"* ]]; then
+    NAME="${ARTIST} - ${NAME}"
+  fi
+  [[ -n $NAME ]] || NAME="$VIDEO_ID"
 fi
 
 slugify() {
-  printf '%s' "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
-    | cut -c1-60 \
-    | sed -E 's/-+$//'
+  /usr/bin/python3 -I -c '
+import re, sys, unicodedata as u
+s = u.normalize("NFKD", sys.argv[1]).encode("ascii", "ignore").decode().lower()
+print(re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:60].rstrip("-"))
+' "$1"
 }
 
 SLUG=$(slugify "$NAME")
-# Fall back to the YouTube video ID when the title is e.g. all decorative
-# Unicode (𝓹𝓾𝓯𝓯 𝓽𝓱𝓮 𝓶𝓪𝓰𝓲𝓬) and slugifies to nothing.
+# Fall back to the YouTube video ID if nothing ASCII survives (e.g. a title
+# entirely in a non-Latin script).
 if [[ -z $SLUG ]]; then
   SLUG="${VIDEO_ID,,}"
 fi
@@ -98,15 +144,19 @@ else
     </dev/null >/dev/null 2>&1
 fi
 
+# "yt" is the default bucket and reads as plain "BG:", like the hand-named entries.
+if [[ $CATEGORY == yt ]]; then LABEL="BG"; else LABEL="BG ${CATEGORY^}"; fi
+
 cat >"$DESKTOP_PATH" <<DESKTOP
 [Desktop Entry]
-Name=BG ${CATEGORY^}: ${NAME}
+Name=${LABEL}: ${NAME}
 Comment=Set ${NAME} as background video with audio (subsctl bg)
-Exec=bash -c '${SUBSCTL} bg "${VIDEO_PATH}" && sleep 0.5 && pkill -x swaybg 2>/dev/null; true'
+Exec=${SUBSCTL} bg "${VIDEO_PATH}"
 Icon=${ICON_PATH}
 Terminal=false
 Type=Application
 Categories=AudioVideo;Video;
+NoDisplay=true
 DESKTOP
 
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
@@ -116,5 +166,5 @@ echo "registered: $DESKTOP_PATH"
 if (( SET_NOW )); then
   "$SUBSCTL" bg "$VIDEO_PATH"
   sleep 0.5
-  pkill -x swaybg 2>/dev/null || true
+  # subsctl owns the explicit controller handoff.
 fi

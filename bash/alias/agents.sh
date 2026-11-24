@@ -6,6 +6,11 @@ alias cl='claude'
 alias clr='claude --resume'
 alias lcc='claude-local'
 
+# One-shot unleashed claude prompt: ucp fix the failing test
+ucp() {
+  unleash claude -p "$*"
+}
+
 # Codex with fzf profile picker + full-auto
 cx() {
   local profile
