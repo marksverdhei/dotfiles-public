@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Toggle: detach keyboard focus from the mouse.
+#
+#   attached (follow_mouse = 1): keyboard focus follows the cursor (default).
+#   detached (follow_mouse = 3): the mouse clicks and scrolls whatever it points
+#     at, but keyboard focus stays on the window you chose; move it with
+#     keybinds (movefocus, alt-tab) or toggle back.
+#
+# Live only: applied via hyprctl, no reload. A Hyprland restart or `hyprctl
+# reload` returns to the configured default (attached), which is the safe side.
+# While detached, the active border turns amber so you can see where typing goes.
+#
+# Usage: hypr-focus-detach-toggle [on|off|toggle|status]   (default: toggle)
+set -euo pipefail
+
+STATE="${XDG_RUNTIME_DIR:-/tmp}/hypr-focus-detach"   # holds the saved border while detached
+DETACHED_BORDER="rgba(ffb000ee)"
+
+current() { hyprctl getoption input:follow_mouse -j | python3 -c 'import json,sys;print(json.load(sys.stdin)["int"])'; }
+
+border() {
+  hyprctl getoption general:col.active_border -j |
+    python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+v = d.get("custom") or d.get("str") or ""
+# getoption prints gradients as bare "aarrggbb ... 60deg"; keyword wants 0x-prefixed colours.
+print(" ".join("0x" + t if re.fullmatch(r"[0-9a-fA-F]{8}", t) else t for t in v.split()))'
+}
+
+detach() {
+  [ -f "$STATE" ] || border > "$STATE"
+  hyprctl --batch "keyword input:follow_mouse 3 ; keyword general:col.active_border $DETACHED_BORDER" >/dev/null
+  notify-send -u low -t 1800 "Focus detached" "Keyboard stays put; mouse acts where it points" 2>/dev/null || true
+}
+
+attach() {
+  local saved=""
+  [ -f "$STATE" ] && saved="$(cat "$STATE")"
+  if [ -n "$saved" ]; then
+    hyprctl --batch "keyword input:follow_mouse 1 ; keyword general:col.active_border $saved" >/dev/null
+  else
+    hyprctl keyword input:follow_mouse 1 >/dev/null
+  fi
+  rm -f "$STATE"
+  notify-send -u low -t 1800 "Focus follows mouse" 2>/dev/null || true
+}
+
+case "${1:-toggle}" in
+  on) detach ;;
+  off) attach ;;
+  status) [ "$(current)" = 3 ] && echo detached || echo attached ;;
+  toggle) if [ "$(current)" = 3 ]; then attach; else detach; fi ;;
+  *) echo "usage: $0 [on|off|toggle|status]" >&2; exit 2 ;;
+esac
+pkill -RTMIN+12 -x waybar 2>/dev/null || true

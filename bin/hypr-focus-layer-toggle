@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Jump keyboard focus between the floating layer and the tiled layer on the
+# current workspace (i3's "focus mode_toggle"). Bound to SUPER ALT T (SUPER T toggles floating).
+set -euo pipefail
+floating=$(hyprctl activewindow -j | python3 -c 'import json,sys;d=json.load(sys.stdin);print(str(d.get("floating",False)).lower())' 2>/dev/null || echo false)
+if [ "$floating" = true ]; then
+  hyprctl dispatch focuswindow tiled >/dev/null
+else
+  hyprctl dispatch focuswindow floating >/dev/null
+fi
