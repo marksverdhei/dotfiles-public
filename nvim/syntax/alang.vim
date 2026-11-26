@@ -1,0 +1,1 @@
+/home/me/archilang/editor/nvim/syntax/alang.vim

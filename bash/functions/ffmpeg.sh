@@ -73,3 +73,38 @@ mp4_con() {
     "$out"
 }
 
+
+ffmerge() {
+  # Losslessly join any number of videos end to end (concat demuxer, no re-encode).
+  # Inputs must share codecs/resolution; use mp4_con to re-encode mismatched files.
+  if [[ $# -lt 2 ]]; then
+    printf "Usage: ffmerge file1 file2 [file3 ...] [-o output]\n" >&2
+    return 1
+  fi
+
+  local out="" f
+  local -a files=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -o) out="$2"; shift 2 ;;
+      *)  files+=("$1"); shift ;;
+    esac
+  done
+
+  for f in "${files[@]}"; do
+    [[ ! -f $f ]] && { printf "File not found: %s\n" "$f" >&2; return 1; }
+  done
+
+  [[ -z $out ]] && out="${files[0]%.*}_merged.${files[0]##*.}"
+
+  local list
+  list=$(mktemp --suffix=.txt) || return 1
+  for f in "${files[@]}"; do
+    printf "file '%s'\n" "$(realpath "$f" | sed "s/'/'\\\\''/g")" >> "$list"
+  done
+
+  ffmpeg -y -f concat -safe 0 -i "$list" -c copy "$out"
+  local rc=$?
+  rm -f "$list"
+  return $rc
+}

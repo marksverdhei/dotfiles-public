@@ -16,6 +16,7 @@ add_to_ldpath() {
 
 add_to_path "$HOME/.local/bin"
 add_to_path "$HOME/.cargo/bin"
+add_to_path "$HOME/.elan/bin"
 add_to_path "$HOME/go/bin"
 add_to_path "$DOTFILES/bin"
 add_to_path "$DOTFILES_PRIVATE/bin"
